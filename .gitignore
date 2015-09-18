@@ -1,0 +1,95 @@
+###### ################
+##	project related
+### ###################
+
+###### ################
+##	system (linux)
+### ###################
+*~
+.svn/
+*.key
+
+###### ################
+##	java
+### ###################
+*.class
+
+###### ################
+##	nodejs / npm
+### ###################
+node_modules/
+lib-cov
+*.seed
+
+###### ################
+##	bowerjs
+### ###################
+bower_components/
+
+###### ################
+##	sailsjs
+### ###################
+.sails
+.waterline
+.rigging
+.tmp
+
+###### ################
+##	other
+### ###################
+*.log*
+.editorconfig
+
+###### ################
+##	system (osx)
+##	thx: http://goo.gl/y4dZq
+### ###################
+.DS_Store
+
+###### ################
+##	eclipse
+##	thx: http://goo.gl/y4dZq
+### ###################
+.classpath
+.project
+.settings/
+
+###### ################
+##	intellij
+##	thx: http://goo.gl/y4dZq
+### ###################
+.idea/
+*.iml
+*.iws
+
+###### ################
+##	maven
+##	thx: http://goo.gl/y4dZq
+### ###################
+target/
+
+###### ################
+##	android
+### ###################
+proguard_logs/
+
+###### ################
+##	gradle
+### ###################
+.gradle
+/local.properties
+/gradle.properties
+/.idea/workspace.xml
+/build
+
+###### ################
+##	python
+##	thx: http://goo.gl/WR3a3F
+### ###################
+__pycache__/
+__init__.py
+*.py[cod]
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+.cache
