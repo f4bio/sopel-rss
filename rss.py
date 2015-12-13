@@ -9,19 +9,21 @@ from sopel.config.types import (StaticSection, ValidatedAttribute, ListAttribute
 
 class RSSSection(StaticSection):
     feeds = ListAttribute('feeds', default=[])
+    del_by_index = ListAttribute('del_by_index', default=False)
 
 
 def setup(bot):
     bot.config.define_section('rss', RSSSection)
     bot.memory['rss'] = SopelMemory()
     bot.memory['rss']['feeds'] = []
+    bot.memory['rss']['del_by_index'] = False
     _config_read(bot)
 
 
 def configure(config):
     config.define_section('rss', RSSSection)
     config.rss.configure_setting('feeds', 'strings divided by a newline each consisting of channel, name, url and interval divided by spaces')
-
+    config.rss.configure_setting('del_by_index', 'allow to delete feeds by index. this is potentially dangerous as the index of the remaining feeds may change after one feed has been deleted')
 
 def shutdown(bot):
     print('shutting down...')
@@ -69,14 +71,14 @@ def rssadd(bot, trigger):
                 bot.memory['rss']['feeds'].append({'channel':channel, 'name':name, 'url':url, 'interval':interval})
                 bot.say('rss feed "{}" added successfully'.format(url))
     except:
-        bot.say('unable to add feed "{}": invalid url!'.format(url))
+        bot.say('unable to add feed "{}": invalid url! syntax: .{} <channel> <name> <url> <interval>'.format(url, trigger.group(1)))
         return NOLIMIT
 
     _config_save(bot)
 
     return NOLIMIT
 
-
+@require_privmsg
 @require_admin
 @commands('rssdel')
 @example('.rssdel <index>|<name>')
@@ -96,7 +98,12 @@ def rssdel(bot, trigger):
         _delFeedByName(bot, arg)
     else:
         # arg is a number
-        _delFeedByIndex(bot, int(arg))
+        if not bot.memory['rss']['del_by_index']:
+            bot.say('please use ".{} {}" to delete feed number {}'.format(trigger.group(1), _getNameByIndex(bot, int(arg)-1), arg))
+            return NOLIMIT
+
+        # subtract 1 from index argument as rsslist starts counting at 1 and not at 0
+        _delFeedByIndex(bot, int(arg)-1)
 
     _config_save(bot)
 
@@ -106,8 +113,8 @@ def rssdel(bot, trigger):
 # shoot yourself in the feet
 @require_privmsg
 @require_admin
-@commands('rssdeleteallfeeds')
-@example('.rssdeleteallfeeds')
+@commands('rssdelallfeeds')
+@example('.rssdelallfeeds')
 def rssdeleteallfeeds(bot, trigger):
     # check number of parameters
     if not trigger.group(2) is None:
@@ -122,12 +129,13 @@ def rssdeleteallfeeds(bot, trigger):
     return NOLIMIT
 
 
+@require_admin
 @commands('rssget')
-@example('.rssget <name>')
+@example('.rssget <name> [<scope>]')
 def rssget(bot, trigger):
     # check number of parameters
-    if trigger.group(3) is None or trigger.group(4):
-        bot.say('syntax: .{} <name>'.format(trigger.group(1)))
+    if trigger.group(3) is None or trigger.group(4) != 'all' or trigger.group(5):
+        bot.say('syntax: .{} <name> [<scope>]'.format(trigger.group(1)))
         return NOLIMIT
 
     name = trigger.group(3)
@@ -141,8 +149,11 @@ def rssget(bot, trigger):
         return NOLIMIT
 
     feed = feedparser.parse(url)
-    for key in feed['entries']:
-        bot.say(unidecode(key['title']) + ' - ' + key['link'])
+    for item in feed['entries']:
+        print('\n'.join(item))
+        bot.say(unidecode(item['title']) + ' - ' + item['link'])
+        return NOLIMIT
+
     return NOLIMIT
 
 
@@ -167,17 +178,22 @@ def rsslist(bot, trigger):
 
 # read config from disk to memory
 def _config_read(bot):
+    # feeds
     if bot.config.rss.feeds and bot.config.rss.feeds[0]:
         for feed in bot.config.rss.feeds:
             atoms = feed.split(' ')
             bot.memory['rss']['feeds'].append({'channel':atoms[0],'name':atoms[1],'url':atoms[2],'interval':atoms[3]})
 
-    print('Read config from disk!')
+    # del_by_index
+    if bot.config.rss.del_by_index:
+        bot.memory['rss']['del_by_index'] = bot.config.rss.del_by_index
+
+    print('Config read from disk!')
 
     # sort list by channel name
     bot.memory['rss']['feeds'].sort(key=operator.itemgetter('channel'))
 
-    print('Sorted feeds!')
+    print('Feeds sorted!')
 
     # write config to disk after it has been sorted
     _config_save(bot)
@@ -200,8 +216,7 @@ def _config_save(bot):
 
     try:
         bot.config.save()
-        # TODO: remove the next line
-        print('Saved config to disk!')
+        print('Config saved to disk!')
     except:
         print('Unable to save config to disk!')
 
@@ -216,8 +231,8 @@ def _delFeedByIndex(bot, index):
 
     # delete feed
     try:
-        if bot.memory['rss']['feeds'][index - 1]:
-            del((bot.memory['rss']['feeds'])[index - 1])
+        if bot.memory['rss']['feeds'][index]:
+            del((bot.memory['rss']['feeds'])[index])
             bot.say('rss feed "{}" deleted successfully'.format(url))
     except:
         bot.say('unable to delete feed "{}": feed number doesn\'t exist!'.format(index))
@@ -242,5 +257,9 @@ def _getIndexByName(bot, name):
             return feeds.index(feed)
 
 
+def _getNameByIndex(bot, index):
+    return bot.memory['rss']['feeds'][index]['name']
+
+
 def _getUrlByIndex(bot, index):
-    return bot.memory['rss']['feeds'][index-1]['url']
+    return bot.memory['rss']['feeds'][index]['url']
