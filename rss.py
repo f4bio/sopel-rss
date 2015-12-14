@@ -147,7 +147,7 @@ def rssget(bot, trigger):
         chatty = True
 
     try:
-        url = __getFeedUrlByName(bot, name)
+        url = __getUrlByName(bot, name)
         if url is None:
             raise Exception
     except:
@@ -160,13 +160,15 @@ def rssget(bot, trigger):
         bot.say('error reading feed "{}"'.format(url))
         return NOLIMIT
 
+    channel = __getChannelByName(bot, name)
+
     position = __getPositionByName(bot, name)
     new_position = position
 
     # print new or all items
     for item in reversed(feed['entries']):
         if chatty:
-            bot.say(unidecode(item['title']) + ' - ' + item['link'])
+            bot.say(unidecode('\u0002[' + name + ']\u000F ' + item['title']) + ' \u0002→\u000F ' + item['link'], channel)
         if position == __normalizePosition(item['id']):
             chatty = True
         new_position = __normalizePosition(item['id'])
@@ -274,7 +276,14 @@ def __delFeedByName(bot, name):
     __delFeedByIndex(bot, index)
 
 
-def __getFeedUrlByName(bot, name):
+def __getChannelByName(bot, name):
+    feeds = bot.memory['rss']['feeds']
+    for feed in feeds:
+        if feed['name'] == name:
+            return feed['channel']
+
+
+def __getUrlByName(bot, name):
     feeds = bot.memory['rss']['feeds']
     for feed in feeds:
         if feed['name'] == name:
