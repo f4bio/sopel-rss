@@ -3,31 +3,32 @@ import operator
 from unidecode import unidecode
 from urllib.request import urlopen
 from sopel.tools import SopelMemory, SopelMemoryWithDefault
-from sopel.module import commands, example, NOLIMIT, require_privmsg, require_admin
+from sopel.module import commands, example, interval, NOLIMIT, require_privmsg, require_admin
 from sopel.config.types import (StaticSection, ValidatedAttribute, ListAttribute)
 
 
 class RSSSection(StaticSection):
-    feeds = ListAttribute('feeds', default=[])
     del_by_id = ListAttribute('del_by_id', default=False)
+    feeds = ListAttribute('feeds', default=[])
 
 
 def setup(bot):
     bot.config.define_section('rss', RSSSection)
     bot.memory['rss'] = SopelMemory()
-    bot.memory['rss']['feeds'] = []
     bot.memory['rss']['del_by_id'] = False
+    bot.memory['rss']['feeds'] = []
+    bot.memory['rss']['uptime'] = 0
     __config_read(bot)
 
 
 def configure(config):
     config.define_section('rss', RSSSection)
-    config.rss.configure_setting('feeds', 'strings divided by a newline each consisting of channel, name, url and interval divided by spaces')
     config.rss.configure_setting('del_by_id', 'allow to delete feeds by index. this is potentially dangerous as the index of the remaining feeds may change after one feed has been deleted')
+    config.rss.configure_setting('feeds', 'strings divided by a newline each consisting of channel, name, url and interval divided by spaces')
 
 def shutdown(bot):
-    print('shutting down...')
-    bot.debug('rss', 'shutting down...', 'always')
+    print('Shutting down!')
+    bot.debug('rss', 'Shutting down!', 'always')
     __config_save(bot)
 
 
@@ -41,6 +42,8 @@ def rssadd(bot, trigger):
             bot.say('syntax: .{} <channel> <name> <url> <interval>'.format(trigger.group(1)))
             return NOLIMIT
     # TODO: check that no parameter contains a comma
+    # TODO: check that channel begins with #
+    # TODO: check that interval is an int
 
     # get arguments
     channel = trigger.group(3)
@@ -77,6 +80,7 @@ def rssadd(bot, trigger):
     __config_save(bot)
 
     return NOLIMIT
+
 
 @require_privmsg
 @require_admin
@@ -146,37 +150,7 @@ def rssget(bot, trigger):
     if (trigger.group(4) and trigger.group(4) == 'all'):
         chatty = True
 
-    try:
-        url = __getUrlByName(bot, name)
-        if url is None:
-            raise Exception
-    except:
-        bot.say('url of feed "{}" couldn\'t be read!'.format(name))
-        return NOLIMIT
-
-    try:
-        feed = feedparser.parse(url)
-    except:
-        bot.say('error reading feed "{}"'.format(url))
-        return NOLIMIT
-
-    channel = __getChannelByName(bot, name)
-
-    position = __getPositionByName(bot, name)
-    new_position = position
-
-    # print new or all items
-    for item in reversed(feed['entries']):
-        if chatty:
-            bot.say(unidecode('\u0002[' + name + ']\u000F ' + item['title']) + ' \u0002→\u000F ' + item['link'], channel)
-        if position == __normalizePosition(item['id']):
-            chatty = True
-        new_position = __normalizePosition(item['id'])
-
-    __setPositionByName(bot, name, new_position)
-
-    # write config to disk after new position has been set
-    __config_save(bot)
+    __updateFeed(bot, name, chatty)
 
     return NOLIMIT
 
@@ -190,6 +164,8 @@ def rsslist(bot, trigger):
         bot.say('.{} must be called without parameters'.format(trigger.group(1)))
         return NOLIMIT
 
+    # TODO: accept channel argument to list feeds in specific channel (but be careful which id to return, cf. rssdel id
+
     feeds = bot.memory['rss']['feeds']
     bot.say('number of rss feeds: {}'.format(len(feeds)))
     for feed in feeds:
@@ -198,6 +174,32 @@ def rsslist(bot, trigger):
 
 
 #####
+
+
+@interval(15)
+def __update(bot):
+    cycle = 15
+    uptime = bot.memory['rss']['uptime']
+
+    # loop over feeds
+    for feed in bot.memory['rss']['feeds']:
+        # check if feed should be updated
+
+        bot.say('uptime {}: {}'.format(feed['name'], uptime), '#freiburg')
+        bot.say('interval {}: {}'.format(feed['name'], int(feed['interval'])), '#freiburg')
+        bot.say('check {}: {}'.format(feed['name'], uptime % int(feed['interval'])), '#freiburg')
+
+        if uptime % int(feed['interval']) < cycle:
+            # post update
+            __updateFeed(bot, feed['name'], False)
+            bot.say('update {}!'.format(feed['name']), '#freiburg')
+
+    # avoid upper limit of uptime variable size
+    if uptime > cycle * 10:
+        uptime %= cycle * 10
+
+    # increment uptime
+    bot.memory['rss']['uptime'] = uptime + cycle
 
 
 # read config from disk to memory
@@ -218,12 +220,8 @@ def __config_read(bot):
     if bot.config.rss.del_by_id:
         bot.memory['rss']['del_by_id'] = bot.config.rss.del_by_id
 
-    print('Config read from disk!')
-
     # sort list by channel name
     bot.memory['rss']['feeds'].sort(key=operator.itemgetter('channel'))
-
-    print('Feeds sorted!')
 
     # write config to disk after it has been sorted
     __config_save(bot)
@@ -241,17 +239,19 @@ def __config_save(bot):
     # flatten feeds for config file
     feeds = []
     for feed in bot.memory['rss']['feeds']:
-        position = ''
-        if feed['position'] != 'NOPOSITION':
-            position = ' ' + __normalizePosition(feed['position'])
+        try:
+            if feed['position'] != 'NOPOSITION':
+                position = ' ' + __normalizePosition(feed['position'])
+        except KeyError:
+            position = ''
         feeds.append(feed['channel'] + ' ' + feed['name'] + ' ' + feed['url'] + ' ' + feed['interval'] + position)
     bot.config.rss.feeds = [",".join(feeds)]
 
     try:
         bot.config.save()
-        print('Config saved to disk!')
     except:
         print('Unable to save config to disk!')
+        bot.debug('rss', 'Unable to save config to disk!', 'always')
 
 
 def __delFeedByIndex(bot, index):
@@ -303,9 +303,10 @@ def __getNameByIndex(bot, index):
 
 def __getPositionByName(bot, name):
     index = __getIndexByName(bot, name)
-    if bot.memory['rss']['feeds'][index]['position']:
+    try:
         return bot.memory['rss']['feeds'][index]['position']
-    return 'NOPOSITION'
+    except KeyError:
+        return 'NOPOSITION'
 
 
 def __getUrlByIndex(bot, index):
@@ -319,3 +320,37 @@ def __normalizePosition(position):
 def __setPositionByName(bot, name, position):
     index = __getIndexByName(bot, name)
     bot.memory['rss']['feeds'][index]['position'] = position
+
+
+def __updateFeed(bot, name, chatty):
+    try:
+        url = __getUrlByName(bot, name)
+        if url is None:
+            raise Exception
+    except:
+        bot.say('url of feed "{}" couldn\'t be read!'.format(name))
+        return NOLIMIT
+
+    try:
+        feed = feedparser.parse(url)
+    except:
+        bot.say('error reading feed "{}"'.format(url))
+        return NOLIMIT
+
+    channel = __getChannelByName(bot, name)
+
+    position = __getPositionByName(bot, name)
+    new_position = position
+
+    # print new or all items
+    for item in reversed(feed['entries']):
+        if chatty:
+            bot.say(unidecode('\u0002[' + name + ']\u000F ' + item['title']) + ' \u0002→\u000F ' + item['link'], channel)
+        if position == __normalizePosition(item['id']):
+            chatty = True
+        new_position = __normalizePosition(item['id'])
+
+    __setPositionByName(bot, name, new_position)
+
+    # write config to disk after new position has been set
+    __config_save(bot)
