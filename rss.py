@@ -173,31 +173,6 @@ def rsslist(bot, trigger):
     return NOLIMIT
 
 
-#####
-
-
-@interval(15)
-def __update(bot):
-    cycle = 15
-    uptime = bot.memory['rss']['uptime']
-
-    # loop over feeds
-    for feed in bot.memory['rss']['feeds']:
-
-        # check if feed should be updated
-        if uptime % int(feed['interval']) < cycle:
-
-            # post updates
-            __updateFeed(bot, feed['name'], False)
-
-    # avoid upper limit of uptime variable size
-    if uptime > cycle * 10:
-        uptime %= cycle * 10
-
-    # increment uptime
-    bot.memory['rss']['uptime'] = uptime + cycle
-
-
 # read config from disk to memory
 def __config_read(bot):
     # feeds
@@ -316,6 +291,29 @@ def __normalizePosition(position):
 def __setPositionByName(bot, name, position):
     index = __getIndexByName(bot, name)
     bot.memory['rss']['feeds'][index]['position'] = position
+
+
+@interval(15)
+def __update(bot):
+    cycle = 15
+    uptime = bot.memory['rss']['uptime']
+
+    # loop over feeds
+    for feed in bot.memory['rss']['feeds']:
+
+        # check if feed should be updated
+        # this line is the calculus when to trigger an update
+        if uptime % int(feed['interval']) < cycle:
+
+            # post updates
+            __updateFeed(bot, feed['name'], False)
+
+    # avoid upper limit of uptime variable size
+    if uptime > cycle * 10:
+        uptime %= cycle * 10
+
+    # increment uptime
+    bot.memory['rss']['uptime'] = uptime + cycle
 
 
 def __updateFeed(bot, name, chatty):
