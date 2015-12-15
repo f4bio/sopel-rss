@@ -183,14 +183,11 @@ def __update(bot):
 
     # loop over feeds
     for feed in bot.memory['rss']['feeds']:
+
         # check if feed should be updated
-
-        bot.say('uptime {}: {}'.format(feed['name'], uptime), '#freiburg')
-        bot.say('interval {}: {}'.format(feed['name'], int(feed['interval'])), '#freiburg')
-        bot.say('check {}: {}'.format(feed['name'], uptime % int(feed['interval'])), '#freiburg')
-
         if uptime % int(feed['interval']) < cycle:
-            # post update
+
+            # post updates
             __updateFeed(bot, feed['name'], False)
             bot.say('update {}!'.format(feed['name']), '#freiburg')
 
