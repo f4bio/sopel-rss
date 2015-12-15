@@ -189,7 +189,6 @@ def __update(bot):
 
             # post updates
             __updateFeed(bot, feed['name'], False)
-            bot.say('update {}!'.format(feed['name']), '#freiburg')
 
     # avoid upper limit of uptime variable size
     if uptime > cycle * 10:
