@@ -13,7 +13,7 @@ Put *rss.py* in your *~/.sopel/modules* directory.
 
 *Requires:* owner or admin
 
-Add the feed *\<url\>* to *\<channel\>* and *\<name\>* it. The feed will be read at approximately every *\<interval\>* seconds and new items will be automatically posted to *\<channel\>*.
+Add the feed *\<url\>* to *\<channel\>* and *\<name\>* it. The feed will be read at approximately every *\<interval\>* seconds and new items will be automatically posted to *\<channel\>*. At most, the bot will update every 60 seconds.
 
 ### rssdel &mdash; delete a feed
 
@@ -66,3 +66,11 @@ This is the main data of the bot which will be read when the bot is started or w
 *Default:* False
 
 This option is dangerous because after a feed has been deleted the ID of all remaining feed (which can be determined by the command *.rsslist*) could change. Therefore, this option is disabled by default but can be enabled for faster deletion of feeds.
+
+### TODO
+
+The cycle time of the bot (update feeds at most every *cycle* seconds) should be configurable. This line decides if the update method for a feed will be call: 
+ ```python
+ if uptime % int(feed['interval']) < cycle
+ ```
+ 

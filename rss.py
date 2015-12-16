@@ -1,6 +1,5 @@
 import feedparser
 import operator
-from unidecode import unidecode
 from urllib.request import urlopen
 from sopel.tools import SopelMemory, SopelMemoryWithDefault
 from sopel.module import commands, example, interval, NOLIMIT, require_privmsg, require_admin
@@ -25,6 +24,7 @@ def configure(config):
     config.define_section('rss', RSSSection)
     config.rss.configure_setting('del_by_id', 'allow to delete feeds by index. this is potentially dangerous as the index of the remaining feeds may change after one feed has been deleted')
     config.rss.configure_setting('feeds', 'strings divided by a newline each consisting of channel, name, url and interval divided by spaces')
+
 
 def shutdown(bot):
     print('Shutting down!')
@@ -143,10 +143,11 @@ def rssget(bot, trigger):
         bot.say('syntax: .{} <name> [<scope>]'.format(trigger.group(1)))
         return NOLIMIT
 
-    # if chatty is True then bot.say feed item
+    # if chatty is True then the bot will post feed items to a channel
     chatty = False
 
     name = trigger.group(3)
+
     if (trigger.group(4) and trigger.group(4) == 'all'):
         chatty = True
 
@@ -293,13 +294,17 @@ def __setPositionByName(bot, name, position):
     bot.memory['rss']['feeds'][index]['position'] = position
 
 
-@interval(15)
+@interval(60)
 def __update(bot):
-    cycle = 15
+    cycle = 60
     uptime = bot.memory['rss']['uptime']
 
     # loop over feeds
     for feed in bot.memory['rss']['feeds']:
+
+        # FIXME
+        print("uptime: " + str(uptime))
+        print("feed['name'] (i=" + feed['interval'] + "): " + feed['name'])
 
         # check if feed should be updated
         # this line is the calculus when to trigger an update
@@ -338,8 +343,13 @@ def __updateFeed(bot, name, chatty):
 
     # print new or all items
     for item in reversed(feed['entries']):
+        # FIXME
+        print("chatty: " + str(chatty))
+
         if chatty:
-            bot.say(unidecode('\u0002[' + name + ']\u000F ' + item['title']) + ' \u0002→\u000F ' + item['link'], channel)
+            # FIXME
+            print('\u0002[' + name + ']\u000F ' + item['title'] + ' \u0002→\u000F ' + item['link'])
+            bot.say('\u0002[' + name + ']\u000F ' + item['title'] + ' \u0002→\u000F ' + item['link'], channel)
         if position == __normalizePosition(item['id']):
             chatty = True
         new_position = __normalizePosition(item['id'])
