@@ -29,7 +29,7 @@ Use *.rsslist* to list get the names and IDs of all feeds. Deletion by ID is per
 
 *Requires:* owner or admin, query with bot
 
-This will delete all feeds. Be sure to keep a backup of you configuration file.
+Delete all feeds without asking for confirmation. Be sure to keep a backup of you configuration file.
 
 ### rssget &mdash; read a feed and post new items
 
@@ -37,9 +37,9 @@ This will delete all feeds. Be sure to keep a backup of you configuration file.
 
 *Requires:* owner or admin
 
-If not *scope* is given then the bot will post only new items. During the first run no item will be posted but the ID of the last feed item will be remembered (and written to disk in the config file, cf. Options: *feeds*).
+If *scope* is omitted then the bot will post new items since the last run to the channel to which the feed has been added. During the first run no item will be posted but the ID of the last feed item will be remembered (and written to disk in the config file, cf. Options: *feeds*).
 
-*scope* can only be all. In this case the bot will post the whole feed. Mainly useful for debugging.
+*scope* can only be *all*. In this case the bot will post the whole feed to the channel to which the feed has been added. Mainly useful for debugging.
 
 ### rsslist &mdash; list feeds
 
