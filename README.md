@@ -1,6 +1,10 @@
 # SOPEL RSS
 New implementation of the deprecated rss module for [sopel](https://github.com/sopel-irc/sopel)
 
+## Installation
+
+Put *rss.py* in your *~/.sopel/modules* directory.
+
 ## Commands
 
 ### rssadd &mdash; add a feed
@@ -9,11 +13,15 @@ New implementation of the deprecated rss module for [sopel](https://github.com/s
 
 *Requires:* owner or admin
 
+Add the feed *\<url\>* to *\<channel\>* and *\<name\>* it. The feed will be read at approximately every *\<interval\>* seconds and new items will be automatically posted to *\<channel\>*.
+
 ### rssdel &mdash; delete a feed
 
 **Syntax:** *.rssdel \<id\>|\<name\>*
 
 *Requires:* owner or admin
+
+Use *.rsslist* to list get the names and IDs of all feeds. Deletion by ID is per default turned off (cf. Options: *del_by_id*).
 
 ### rssdelallfeeds &mdash; delete all feeds
 
@@ -21,11 +29,17 @@ New implementation of the deprecated rss module for [sopel](https://github.com/s
 
 *Requires:* owner or admin, query with bot
 
+This will delete all feeds. Be sure to keep a backup of you configuration file.
+
 ### rssget &mdash; read a feed and post new items
 
 **Syntax:** *.rssget \<name\> [\<scope\>]*
 
 *Requires:* owner or admin
+
+If not *scope* is given then the bot will post only new items. During the first run no item will be posted but the ID of the last feed item will be remembered (and written to disk in the config file, cf. Options: *feeds*).
+
+*scope* can only be all. In this case the bot will post the whole feed. Mainly useful for debugging.
 
 ### rsslist &mdash; list feeds
 
