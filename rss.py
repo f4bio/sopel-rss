@@ -1,9 +1,9 @@
 import feedparser
 import operator
 from urllib.request import urlopen
-from sopel.tools import SopelMemory, SopelMemoryWithDefault
+from sopel.tools import SopelMemory
 from sopel.module import commands, example, interval, NOLIMIT, require_privmsg, require_admin
-from sopel.config.types import (StaticSection, ValidatedAttribute, ListAttribute)
+from sopel.config.types import (StaticSection, ListAttribute)
 
 
 class RSSSection(StaticSection):
@@ -39,11 +39,8 @@ def rssadd(bot, trigger):
     # check number of parameters
     for i in range(2,7):
         if trigger.group(i) is None:
-            bot.say('syntax: .{} <channel> <name> <url> <interval>'.format(trigger.group(1)))
+            bot.say('syntax: {}{} <channel> <name> <url> <interval>'.format(bot.config.core.prefix, trigger.group(1)))
             return NOLIMIT
-    # TODO: check that no parameter contains a comma
-    # TODO: check that channel begins with #
-    # TODO: check that interval is an int
 
     # get arguments
     channel = trigger.group(3)
@@ -66,6 +63,18 @@ def rssadd(bot, trigger):
             bot.say('feed name "{}" is already in use, please choose a different one'.format(name))
             return NOLIMIT
 
+    # check that channel starts with #
+    if not channel.startswith('#'):
+        bot.say('channel "{}" must begin with a "#"'.format(channel))
+        return NOLIMIT
+
+    # check that interval is a number
+    try:
+        int(interval)
+    except ValueError:
+        bot.say('feed interval "{}" must be a number'.format(interval))
+        return NOLIMIT
+
     # check that feed url is online
     try:
         with urlopen(url) as f:
@@ -73,6 +82,7 @@ def rssadd(bot, trigger):
                 # save config to memory
                 bot.memory['rss']['feeds'].append({'channel':channel, 'name':name, 'url':url, 'interval':interval})
                 bot.say('rss feed "{}" added successfully'.format(url))
+                bot.join(channel)
     except:
         bot.say('unable to add feed "{}": invalid url! syntax: .{} <channel> <name> <url> <interval>'.format(url, trigger.group(1)))
         return NOLIMIT
@@ -82,7 +92,6 @@ def rssadd(bot, trigger):
     return NOLIMIT
 
 
-@require_privmsg
 @require_admin
 @commands('rssdel')
 @example('.rssdel <id>|<name>')
@@ -91,7 +100,7 @@ def rssdel(bot, trigger):
     arg = trigger.group(3)
 
     if arg is None:
-        bot.say('syntax: .{} <id>|<name>'.format(trigger.group(1)))
+        bot.say('syntax: {}{} <id>|<name>'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
 
     # check if arg is a number
@@ -123,7 +132,7 @@ def rssdel(bot, trigger):
 def rssdeleteallfeeds(bot, trigger):
     # check number of parameters
     if not trigger.group(2) is None:
-        bot.say('.{} must be called without parameters'.format(trigger.group(1)))
+        bot.say('syntax: {}{}'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
 
     bot.memory['rss']['feeds'].clear()
@@ -140,7 +149,7 @@ def rssdeleteallfeeds(bot, trigger):
 def rssget(bot, trigger):
     # check number of parameters
     if trigger.group(3) is None or (trigger.group(4) and trigger.group(4) != 'all') or trigger.group(5):
-        bot.say('syntax: .{} <name> [<scope>]'.format(trigger.group(1)))
+        bot.say('syntax: {}{} <name> [<scope>]'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
 
     # if chatty is True then the bot will post feed items to a channel
@@ -157,19 +166,41 @@ def rssget(bot, trigger):
 
 
 @require_admin
+@commands('rssjoin')
+@example('.rssjoin')
+def rssjoin(bot, trigger):
+    # check number of parameters
+    if not trigger.group(2) is None:
+        bot.say('syntax: {}{}'.format(bot.config.core.prefix, trigger.group(1)))
+        return NOLIMIT
+
+    for feed in bot.memory['rss']['feeds']:
+        bot.join(feed['channel'])
+
+    __config_save(bot)
+
+
+@require_admin
 @commands('rsslist')
 @example('.rsslist')
 def rsslist(bot, trigger):
     # check number of parameters
-    if not trigger.group(2) is None:
-        bot.say('.{} must be called without parameters'.format(trigger.group(1)))
+    if not trigger.group(4) is None:
+        bot.say('syntax: {}{} [<channel>]'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
 
-    # TODO: accept channel argument to list feeds in specific channel (but be careful which id to return, cf. rssdel id
+    channel = trigger.group(3)
+
+    # check that channel starts with #
+    if channel and not channel.startswith('#'):
+        bot.say('channel "{}" must begin with a "#"'.format(channel))
+        return NOLIMIT
 
     feeds = bot.memory['rss']['feeds']
-    bot.say('number of rss feeds: {}'.format(len(feeds)))
     for feed in feeds:
+        if channel:
+            if channel != feed['channel']:
+                continue
         bot.say('{}: {} {} {} {}'.format(feeds.index(feed) + 1, feed['channel'], feed['name'], feed['url'], feed['interval']))
     return NOLIMIT
 
@@ -218,6 +249,12 @@ def __config_save(bot):
             position = ''
         feeds.append(feed['channel'] + ' ' + feed['name'] + ' ' + feed['url'] + ' ' + feed['interval'] + position)
     bot.config.rss.feeds = [",".join(feeds)]
+
+    # save channels
+    channels = bot.config.core.channels
+    for feed in bot.memory['rss']['feeds']:
+      if not feed['channel'] in channels:
+          bot.config.core.channels += [feed['channel']]
 
     try:
         bot.config.save()
@@ -302,10 +339,6 @@ def __update(bot):
     # loop over feeds
     for feed in bot.memory['rss']['feeds']:
 
-        # FIXME
-        print("uptime: " + str(uptime))
-        print("feed['name'] (i=" + feed['interval'] + "): " + feed['name'])
-
         # check if feed should be updated
         # this line is the calculus when to trigger an update
         if uptime % int(feed['interval']) < cycle:
@@ -343,12 +376,7 @@ def __updateFeed(bot, name, chatty):
 
     # print new or all items
     for item in reversed(feed['entries']):
-        # FIXME
-        print("chatty: " + str(chatty))
-
         if chatty:
-            # FIXME
-            print('\u0002[' + name + ']\u000F ' + item['title'] + ' \u0002→\u000F ' + item['link'])
             bot.say('\u0002[' + name + ']\u000F ' + item['title'] + ' \u0002→\u000F ' + item['link'], channel)
         if position == __normalizePosition(item['id']):
             chatty = True

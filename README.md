@@ -47,6 +47,12 @@ If *scope* is omitted then the bot will post new items since the last run to the
 
 *Requires:* owner or admin
 
+### rssjoin &mdash; join all feeds' channels
+
+**Syntax:** *.rssjoin*
+
+*Requires:* owner or admin
+
 ## Options
 
 The following options can be set in the configuration file. Be aware that the bot mustn't be running when editing the configuration file. Otherwise, your edits may be overwritten!
