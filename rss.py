@@ -242,11 +242,12 @@ def __config_save(bot):
     # flatten feeds for config file
     feeds = []
     for feed in bot.memory['rss']['feeds']:
+        position = ''
         try:
             if feed['position'] != 'NOPOSITION':
                 position = ' ' + __normalizePosition(feed['position'])
-        except KeyError:
-            position = ''
+        except:
+            pass
         feeds.append(feed['channel'] + ' ' + feed['name'] + ' ' + feed['url'] + ' ' + feed['interval'] + position)
     bot.config.rss.feeds = [",".join(feeds)]
 
