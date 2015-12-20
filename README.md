@@ -76,10 +76,11 @@ This option is dangerous because after a feed has been deleted the ID of all rem
 
 ### TODO
 
-The cycle time of the bot (update feeds at most every *cycle* seconds) should be configurable. 
+# The cycle time of the bot (update feeds at most every *cycle* seconds) should be configurable. 
 
 This line decides if the update method for a feed will be called: 
  ```python
  if uptime % int(feed['interval']) < cycle
  ```
- 
+
+# The output format and fields should be configurable.
