@@ -1,5 +1,6 @@
-# SOPEL RSS
-New implementation of the deprecated rss module for [sopel](https://github.com/sopel-irc/sopel)
+# sopel-rss
+
+New implementation of the deprecated rss module for [sopel](https://github.com/sopel-irc/sopel). This module motivated the [ansible-role-sopel-runit-debian](https://github.com/RebelCodeBase/ansible-role-sopel-runit-debian) which can be used to deploy the bot to a debian box.
 
 ## Installation
 
