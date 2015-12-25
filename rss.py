@@ -382,10 +382,6 @@ def __updateFeed(bot, name, chatty):
         if chatty:
             message = '\u0002[' + name + ']\u000F '
             message += item['title'] + ' \u0002→\u000F ' + item['link']
-            try:
-                message += '(✎ ' + item['dc:creator'] + ')'
-            except:
-                pass
             bot.say(message, channel)
         new_position = __hashPosition(item['title'] + item['link'] + item['summary'])
         if position == new_position:
