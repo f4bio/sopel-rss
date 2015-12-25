@@ -1,5 +1,7 @@
+import pprint
 import feedparser
 import operator
+import hashlib
 from urllib.request import urlopen
 from sopel.tools import SopelMemory
 from sopel.module import commands, example, interval, NOLIMIT, require_privmsg, require_admin
@@ -245,7 +247,7 @@ def __config_save(bot):
         position = ''
         try:
             if feed['position'] != 'NOPOSITION':
-                position = ' ' + __normalizePosition(feed['position'])
+                position = ' ' + __hashPosition(feed['position'])
         except:
             pass
         feeds.append(feed['channel'] + ' ' + feed['name'] + ' ' + feed['url'] + ' ' + feed['interval'] + position)
@@ -323,8 +325,8 @@ def __getUrlByIndex(bot, index):
     return bot.memory['rss']['feeds'][index]['url']
 
 
-def __normalizePosition(position):
-    return position.replace(" ", "").replace(",", "")
+def __hashPosition(position):
+    return hashlib.md5(position.encode('utf-8')).hexdigest()
 
 
 def __setPositionByName(bot, name, position):
@@ -378,10 +380,16 @@ def __updateFeed(bot, name, chatty):
     # print new or all items
     for item in reversed(feed['entries']):
         if chatty:
-            bot.say('\u0002[' + name + ']\u000F ' + item['title'] + ' \u0002→\u000F ' + item['link'], channel)
-        if position == __normalizePosition(item['id']):
+            message = '\u0002[' + name + ']\u000F '
+            message += item['title'] + ' \u0002→\u000F ' + item['link']
+            try:
+                message += '(✎ ' + item['dc:creator'] + ')'
+            except:
+                pass
+            bot.say(message, channel)
+        new_position = __hashPosition(item['title'] + item['link'] + item['summary'])
+        if position == new_position:
             chatty = True
-        new_position = __normalizePosition(item['id'])
 
     __setPositionByName(bot, name, new_position)
 
