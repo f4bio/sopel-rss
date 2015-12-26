@@ -1,4 +1,3 @@
-import pprint
 import feedparser
 import operator
 import hashlib
