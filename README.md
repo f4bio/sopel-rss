@@ -10,11 +10,11 @@ Put *rss.py* in your *~/.sopel/modules* directory.
 
 ### rssadd &mdash; add a feed
 
-**Syntax:** *.rssadd \<channel\> \<name\> \<url\> \<interval\>*
+**Syntax:** *.rssadd \<channel\> \<name\> \<url\>*
 
 *Requires:* owner or admin
 
-Add the feed *\<url\>* to *\<channel\>* and *\<name\>* it. The feed will be read at approximately every *\<interval\>* seconds and new items will be automatically posted to *\<channel\>*. At most, the bot will update every 60 seconds.
+Add the feed *\<url\>* to *\<channel\>* and *\<name\>* it. The feed will be read approximately every minute and new items will be automatically posted to *\<channel\>*.
 
 ### rssdel &mdash; delete a feed
 
@@ -60,7 +60,7 @@ The following options can be set in the configuration file. Be aware that the bo
 
 ### feeds &mdash; feeds that should be posted to channels
 
-**Syntax:** *feeds=\<channel1\> \<name1\> \<url1\> \<interval1\>[,\<channel2\> \<name2\> \<url2\> \<interval2\>]...*
+**Syntax:** *feeds=\<channel1\> \<name1\> \<url1\>[,\<channel2\> \<name2\> \<url2\>]...*
 
 *Default:* empty
 
