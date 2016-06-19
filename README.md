@@ -77,5 +77,5 @@ This option is dangerous because after a feed has been deleted the ID of all rem
 ### TODO
 
 * Tests are missing
-* Examples should be real examples not syntax explanations
 * The output format and fields should be configurable.
+* Hashes should be stored in a database not in the config file
