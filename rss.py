@@ -1,10 +1,12 @@
+#test
 import feedparser
-import operator
 import hashlib
+import operator
 from urllib.request import urlopen
 from sopel.tools import SopelMemory
 from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
+from sopel.db import SopelDB
 
 
 class RSSSection(StaticSection):
@@ -21,6 +23,10 @@ def setup(bot):
     bot.memory['rss']['feeds'] = []
     bot.memory['rss']['hashes'] = RingBuffer(1000)
     bot.memory['rss']['monitoring_channel'] = ''
+    sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='hashes'"
+    result = bot.db.execute(sql).fetchall()
+    if result == []:
+        bot.db.execute('CREATE TABLE hashes (hashes)')
     __config_read(bot)
 
 
