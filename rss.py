@@ -4,14 +4,14 @@ import hashlib
 from urllib.request import urlopen
 from sopel.tools import SopelMemory
 from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_admin
-from sopel.config.types import (StaticSection, ListAttribute)
+from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
 
 
 class RSSSection(StaticSection):
     del_by_id = ListAttribute('del_by_id', default=False)
     feeds = ListAttribute('feeds', default=[])
     hashes = ListAttribute('hashes', default=[])
-    monitoring_channel = ListAttribute('monitoring_channel',default=[])
+    monitoring_channel = ValidatedAttribute('monitoring_channel', default='')
 
 
 def setup(bot):
@@ -20,7 +20,7 @@ def setup(bot):
     bot.memory['rss']['del_by_id'] = False
     bot.memory['rss']['feeds'] = []
     bot.memory['rss']['hashes'] = RingBuffer(1000)
-    bot.memory['rss']['monitoring_channel'] = []
+    bot.memory['rss']['monitoring_channel'] = ''
     __config_read(bot)
 
 
