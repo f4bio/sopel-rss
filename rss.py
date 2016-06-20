@@ -19,7 +19,7 @@ def setup(bot):
     bot.memory['rss'] = SopelMemory()
     bot.memory['rss']['del_by_id'] = False
     bot.memory['rss']['feeds'] = []
-    bot.memory['rss']['hashes'] = RingBuffer(600)
+    bot.memory['rss']['hashes'] = RingBuffer(1000)
     bot.memory['rss']['monitoring_channel'] = []
     __config_read(bot)
 
@@ -210,7 +210,6 @@ def __config_read(bot):
         for feed in bot.config.rss.feeds:
             # split feed line by spaces
             atoms = feed.split(' ')
-
             bot.memory['rss']['feeds'].append({'channel': atoms[0], 'name': atoms[1], 'url': atoms[2]})
 
     # del_by_id
@@ -219,7 +218,7 @@ def __config_read(bot):
 
     # monitoring_channel
     if bot.config.rss.monitoring_channel:
-        bot.memory['rss']['moitoring_channel'] = bot.config.rss.monitoring_channel
+        bot.memory['rss']['monitoring_channel'] = bot.config.rss.monitoring_channel
 
     # sort list by channel name
     bot.memory['rss']['feeds'].sort(key=operator.itemgetter('channel'))
