@@ -23,10 +23,15 @@ def setup(bot):
     bot.memory['rss']['feeds'] = []
     bot.memory['rss']['hashes'] = RingBuffer(1000)
     bot.memory['rss']['monitoring_channel'] = ''
+
+    # create table hashes in sqlite3 database provided by the sopel framework
+    # use UNIQUE for column hash to minimize database writes by using
+    # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
     sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='hashes'"
     result = bot.db.execute(sql).fetchall()
     if result == []:
-        bot.db.execute('CREATE TABLE hashes (hashes)')
+        bot.db.execute('CREATE TABLE hashes (hash VARCHAR(32) UNIQUE)')
+
     __config_read(bot)
 
 
@@ -211,43 +216,39 @@ def rsslist(bot, trigger):
 
 # read config from disk to memory
 def __config_read(bot):
-    # feeds
+    # read hashes from database
+    sql = 'SELECT * FROM hashes'
+    for hash in bot.db.execute(sql).fetchall():
+        bot.memory['rss']['hashes'].append(hash[0])
+
+    # read feeds from config file
     if bot.config.rss.feeds and bot.config.rss.feeds[0]:
         for feed in bot.config.rss.feeds:
             # split feed line by spaces
             atoms = feed.split(' ')
             bot.memory['rss']['feeds'].append({'channel': atoms[0], 'name': atoms[1], 'url': atoms[2]})
 
-    # del_by_id
+    # read del_by_id from config file
     if bot.config.rss.del_by_id:
         bot.memory['rss']['del_by_id'] = bot.config.rss.del_by_id
 
-    # monitoring_channel
+    # read monitoring_channel from config file
     if bot.config.rss.monitoring_channel:
         bot.memory['rss']['monitoring_channel'] = bot.config.rss.monitoring_channel
-
-    # sort list by channel name
-    bot.memory['rss']['feeds'].sort(key=operator.itemgetter('channel'))
-
-    # read hashes
-    for hash in bot.config.rss.hashes:
-        bot.memory['rss']['hashes'].append(hash)
-
-    # write config to disk after it has been sorted
-    __config_save(bot)
 
 
 # save config from memory to disk
 def __config_save(bot):
-
     if not bot.memory['rss']['feeds']:
         return NOLIMIT
 
-    # monitoring_channel
-    bot.config.rss.monitoring_channel = bot.memory['rss']['monitoring_channel']
+    # save hashes to database
+    sql = 'INSERT OR IGNORE INTO hashes VALUES (?)'
+    for hash in bot.memory['rss']['hashes'].get():
+        bot.db.execute(sql, (hash,))
 
-    # sort list by channel name
-    bot.memory['rss']['feeds'].sort(key=operator.itemgetter('channel'))
+    # save monitoring_channel to config file
+    bot.config.rss.monitoring_channel = bot.memory['rss']['monitoring_channel']
 
     # flatten feeds for config file
     feeds = []
@@ -255,18 +256,14 @@ def __config_save(bot):
         feeds.append(feed['channel'] + ' ' + feed['name'] + ' ' + feed['url'])
     bot.config.rss.feeds = [",".join(feeds)]
 
-    # save channels
+    # save channels to config file
     channels = bot.config.core.channels
     for feed in bot.memory['rss']['feeds']:
         if not feed['channel'] in channels:
             bot.config.core.channels += [feed['channel']]
 
-    # save hashes
-    bot.config.rss.hashes = []
-    for hash in bot.memory['rss']['hashes'].get():
-        bot.config.rss.hashes += [hash]
-
     try:
+        # save config file
         bot.config.save()
     except:
         print('Unable to save config to disk!')
