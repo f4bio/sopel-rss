@@ -1,12 +1,10 @@
-#test
+from __future__ import unicode_literals
 import feedparser
 import hashlib
-import operator
 from urllib.request import urlopen
 from sopel.tools import SopelMemory
 from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
-from sopel.db import SopelDB
 
 
 class RSSSection(StaticSection):
@@ -32,6 +30,7 @@ def setup(bot):
     if result == []:
         bot.db.execute('CREATE TABLE hashes (hash VARCHAR(32) UNIQUE)')
 
+    # read config from disk to memory
     __config_read(bot)
 
 
@@ -46,6 +45,8 @@ def configure(config):
 def shutdown(bot):
     print('Shutting down!')
     bot.debug('rss', 'Shutting down!', 'always')
+
+    # write config from memory to disk
     __config_save(bot)
 
 
