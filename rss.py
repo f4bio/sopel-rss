@@ -219,11 +219,8 @@ def rsslist(bot, trigger):
 def __config_read(bot):
     # read hashes from database
     sql = 'SELECT * FROM hashes'
-    try:
-        for hash in bot.db.execute(sql).fetchall():
-            bot.memory['rss']['hashes'].append(hash[0])
-    except:
-        abort 'Could not read hashes from bot database'
+    for hash in bot.db.execute(sql).fetchall():
+        bot.memory['rss']['hashes'].append(hash[0])
 
     # read feeds from config file
     if bot.config.rss.feeds and bot.config.rss.feeds[0]:
