@@ -219,8 +219,11 @@ def rsslist(bot, trigger):
 def __config_read(bot):
     # read hashes from database
     sql = 'SELECT * FROM hashes'
-    for hash in bot.db.execute(sql).fetchall():
-        bot.memory['rss']['hashes'].append(hash[0])
+    try:
+        for hash in bot.db.execute(sql).fetchall():
+            bot.memory['rss']['hashes'].append(hash[0])
+    except:
+        abort 'Could not read hashes from bot database'
 
     # read feeds from config file
     if bot.config.rss.feeds and bot.config.rss.feeds[0]:
@@ -246,7 +249,14 @@ def __config_save(bot):
     # save hashes to database
     sql = 'INSERT OR IGNORE INTO hashes VALUES (?)'
     for hash in bot.memory['rss']['hashes'].get():
-        bot.db.execute(sql, (hash,))
+        try:
+            bot.db.execute(sql, (hash,))
+        except:
+            # if we have concurrent feed update threads
+            # then a database lock may occur
+            # this is no problem as the ring buffer will
+            # be saved during the next feed update
+            pass
 
     # save monitoring_channel to config file
     bot.config.rss.monitoring_channel = bot.memory['rss']['monitoring_channel']
