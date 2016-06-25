@@ -6,8 +6,9 @@ from sopel.tools import SopelMemory
 from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
 
+
 MAX_HASHES = 400
-RINGBUFFER_SIZE = 400
+
 
 class RSSSection(StaticSection):
     del_by_id = ListAttribute('del_by_id', default=False)
@@ -21,7 +22,7 @@ def setup(bot):
     bot.memory['rss'] = SopelMemory()
     bot.memory['rss']['del_by_id'] = False
     bot.memory['rss']['feeds'] = []
-    bot.memory['rss']['hashes'] = RingBuffer(RINGBUFFER_SIZE)
+    bot.memory['rss']['hashes'] = RingBuffer(MAX_HASHES)
     bot.memory['rss']['monitoring_channel'] = ''
 
     # check if a tables named hashes exists
