@@ -6,6 +6,8 @@ from sopel.tools import SopelMemory
 from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
 
+MAX_HASHES = 400
+RINGBUFFER_SIZE = 400
 
 class RSSSection(StaticSection):
     del_by_id = ListAttribute('del_by_id', default=False)
@@ -19,16 +21,19 @@ def setup(bot):
     bot.memory['rss'] = SopelMemory()
     bot.memory['rss']['del_by_id'] = False
     bot.memory['rss']['feeds'] = []
-    bot.memory['rss']['hashes'] = RingBuffer(1000)
+    bot.memory['rss']['hashes'] = RingBuffer(RINGBUFFER_SIZE)
     bot.memory['rss']['monitoring_channel'] = ''
+
+    # check if a tables named hashes exists
+    sql_check_table = "SELECT name FROM sqlite_master WHERE type='table' AND name='hashes'"
+    result = bot.db.execute(sql_check_table).fetchall()
 
     # create table hashes in sqlite3 database provided by the sopel framework
     # use UNIQUE for column hash to minimize database writes by using
     # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
-    sql = "SELECT name FROM sqlite_master WHERE type='table' AND name='hashes'"
-    result = bot.db.execute(sql).fetchall()
-    if result == []:
-        bot.db.execute('CREATE TABLE hashes (hash VARCHAR(32) UNIQUE)')
+    if not result:
+        sql_create_table = 'CREATE TABLE hashes (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)'
+        bot.db.execute(sql_create_table)
 
     # read config from disk to memory
     __config_read(bot)
@@ -166,6 +171,10 @@ def rssget(bot, trigger):
 
     name = trigger.group(3)
 
+    if not __feedExists(bot, name):
+        bot.say('feed {} doesn\'t exist'.format(name))
+        return NOLIMIT
+
     if (trigger.group(4) and trigger.group(4) == 'all'):
         chatty = True
 
@@ -215,12 +224,51 @@ def rsslist(bot, trigger):
     return NOLIMIT
 
 
+@interval(60)
+def __update(bot):
+    feeds = bot.memory['rss']['feeds']
+    for feed in feeds:
+        __updateFeed(bot, feed['name'], False)
+
+
+def __updateFeed(bot, name, chatty):
+    feed = __readFeed(bot, name)
+    channel = __getChannelByName(bot, name)
+
+    # print new or all items
+    for item in reversed(feed['entries']):
+        hash = __hashEntry(name + item['title'] + item['link'] + item['summary'])
+        if chatty or not hash in bot.memory['rss']['hashes'].get():
+            bot.memory['rss']['hashes'].append(hash)
+            message = '\u0002[' + name + ']\u000F '
+            message += item['title'] + ' \u0002→\u000F ' + item['link']
+            bot.say(message, channel)
+
+    # write config to disk after new hashes have been calculated
+    __config_save(bot)
+
+
+def __readFeed(bot, name):
+    try:
+        url = __getUrlByName(bot, name)
+        if url is None:
+            raise Exception
+    except:
+        bot.say('url of feed "{}" couldn\'t be read!'.format(name), bot.memory['rss']['monitoring_channel'])
+        return NOLIMIT
+
+    try:
+        feed = feedparser.parse(url)
+    except:
+        bot.say('error reading feed "{}"'.format(url), bot.memory['rss']['monitoring_channel'])
+        return NOLIMIT
+    return feed
+
+
 # read config from disk to memory
 def __config_read(bot):
-    # read hashes from database
-    sql = 'SELECT * FROM hashes'
-    for hash in bot.db.execute(sql).fetchall():
-        bot.memory['rss']['hashes'].append(hash[0])
+    # read hashes from database to memory
+    __readHashesFromDatabase(bot)
 
     # read feeds from config file
     if bot.config.rss.feeds and bot.config.rss.feeds[0]:
@@ -243,17 +291,11 @@ def __config_save(bot):
     if not bot.memory['rss']['feeds']:
         return NOLIMIT
 
-    # save hashes to database
-    sql = 'INSERT OR IGNORE INTO hashes VALUES (?)'
-    for hash in bot.memory['rss']['hashes'].get():
-        try:
-            bot.db.execute(sql, (hash,))
-        except:
-            # if we have concurrent feed update threads
-            # then a database lock may occur
-            # this is no problem as the ring buffer will
-            # be saved during the next feed update
-            pass
+    # save hashes from memory to database
+    __saveHashesToDatabase(bot)
+
+    # we want no more than MAX_HASHES in our database
+    __removeOldHashesFromDatabase(bot)
 
     # save monitoring_channel to config file
     bot.config.rss.monitoring_channel = bot.memory['rss']['monitoring_channel']
@@ -276,6 +318,54 @@ def __config_save(bot):
     except:
         print('Unable to save config to disk!')
         bot.debug('rss', 'Unable to save config to disk!', 'always')
+
+
+def __readHashesFromDatabase(bot):
+    sql_hashes = 'SELECT * FROM hashes'
+    hashes = bot.db.execute(sql_hashes).fetchall()
+
+    # each hash in hashes consists of
+    # hash[0]: id
+    # hash[1]: md5 hash
+    for hash in hashes:
+        bot.memory['rss']['hashes'].append(hash[1])
+
+
+def __saveHashesToDatabase(bot):
+    hashes = bot.memory['rss']['hashes'].get()
+
+    # INSERT OR IGNORE is the short form of INSERT ON CONFLICT IGNORE
+    sql_save_hashes = 'INSERT OR IGNORE INTO hashes VALUES (NULL,?)'
+    for hash in hashes:
+        try:
+            bot.db.execute(sql_save_hashes, (hash,))
+        except:
+            # if we have concurrent feed update threads then a database lock may occur
+            # this is no problem as the ring buffer will be saved during the next feed update
+            pass
+
+
+def __removeOldHashesFromDatabase(bot):
+    # make sure the database has no more than MAX_HASHES rows
+    # get the number of rows
+    sql_count_hashes = 'SELECT count(*) FROM hashes'
+    rows = bot.db.execute(sql_count_hashes).fetchall()[0][0]
+
+    if rows > MAX_HASHES:
+
+        # calculate number of rows to delete in table hashes
+        delete_rows = rows - MAX_HASHES
+
+        # prepare sqlite statement to figure out
+        # the ids of those hashes which should be deleted
+        sql_first_hashes = 'SELECT id FROM hashes ORDER BY hashes.id LIMIT (?)'
+
+        # loop over the hashes which should be deleted
+        for row in bot.db.execute(sql_first_hashes, str(delete_rows)).fetchall():
+
+            # delete old hashes from database
+            sql_delete_hashes = 'DELETE FROM hashes WHERE hashes.id = (?)'
+            bot.db.execute(sql_delete_hashes, (str(row[0]),))
 
 
 def __delFeedByIndex(bot, index):
@@ -333,41 +423,12 @@ def __hashEntry(entry):
     return hashlib.md5(entry.encode('utf-8')).hexdigest()
 
 
-@interval(60)
-def __update(bot):
+def __feedExists(bot, name):
     feeds = bot.memory['rss']['feeds']
     for feed in feeds:
-        __updateFeed(bot, feed['name'], False)
-
-
-def __updateFeed(bot, name, chatty):
-    try:
-        url = __getUrlByName(bot, name)
-        if url is None:
-            raise Exception
-    except:
-        bot.say('url of feed "{}" couldn\'t be read!'.format(name), bot.memory['rss']['monitoring_channel'])
-        return NOLIMIT
-
-    try:
-        feed = feedparser.parse(url)
-    except:
-        bot.say('error reading feed "{}"'.format(url), bot.memory['rss']['monitoring_channel'])
-        return NOLIMIT
-
-    channel = __getChannelByName(bot, name)
-
-    # print new or all items
-    for item in reversed(feed['entries']):
-        hash = __hashEntry(name + item['title'] + item['link'] + item['summary'])
-        if chatty or not hash in bot.memory['rss']['hashes'].get():
-            bot.memory['rss']['hashes'].append(hash)
-            message = '\u0002[' + name + ']\u000F '
-            message += item['title'] + ' \u0002→\u000F ' + item['link']
-            bot.say(message, channel)
-
-    # write config to disk after new hashes have been calculated
-    __config_save(bot)
+        if feed['name'] == name:
+            return True
+    return False
 
 
 # Implementing a Ring Buffer
