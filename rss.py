@@ -7,7 +7,7 @@ from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_a
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
 
 
-MAX_HASHES = 400
+MAX_HASHES = 350
 
 
 class RSSSection(StaticSection):
