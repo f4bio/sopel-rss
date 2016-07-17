@@ -362,7 +362,7 @@ def __removeOldHashesFromDatabase(bot):
         sql_first_hashes = 'SELECT id FROM hashes ORDER BY hashes.id LIMIT (?)'
 
         # loop over the hashes which should be deleted
-        for row in bot.db.execute(sql_first_hashes, str(delete_rows)).fetchall():
+        for row in bot.db.execute(sql_first_hashes, (str(delete_rows),)).fetchall():
 
             # delete old hashes from database
             sql_delete_hashes = 'DELETE FROM hashes WHERE hashes.id = (?)'
