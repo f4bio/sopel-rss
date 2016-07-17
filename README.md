@@ -78,4 +78,3 @@ This option is dangerous because after a feed has been deleted the ID of all rem
 
 * Tests are missing
 * The output format and fields should be configurable.
-* Hashes should be stored in a database not in the config file
