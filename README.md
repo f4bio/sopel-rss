@@ -8,7 +8,7 @@ Put *rss.py* in your *~/.sopel/modules* directory.
 
 ## Usage
 
-The rss module posts items of rss feeds to irc channels. It hashes the feed items and stores the hashes in a ring buffer in memory and in a sqlite database on disk. It uses one ring buffer and one database table per feed in order to avoid reposting of old feed items.
+The rss module posts items of rss feeds to irc channels. It hashes the feed items and stores the hashes in a ring buffer in memory and in a sqlite database on disk. It uses one ring buffer and one database table per feed in order to avoid reposting old feed items.
 
 ## Commands
 
