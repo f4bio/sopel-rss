@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 import feedparser
 import hashlib
+from urllib.request import urlopen
 from sopel.tools import SopelMemory
 from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
@@ -191,9 +192,7 @@ def rssadd(bot, trigger):
     try:
         with urlopen(url) as f:
             if f.status == 200:
-
                 __addFeed(bot, channel, feedname, url)
-
                 bot.join(channel)
     except:
         message = '[ERROR] unable to add feed "{}"'.format(url)
