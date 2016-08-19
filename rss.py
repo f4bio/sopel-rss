@@ -2,7 +2,6 @@
 from __future__ import unicode_literals
 import feedparser
 import hashlib
-from urllib.request import urlopen
 from sopel.tools import SopelMemory
 from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
