@@ -3,8 +3,9 @@ from __future__ import unicode_literals
 import feedparser
 import hashlib
 from urllib.request import urlopen
+from sopel.formatting import bold
 from sopel.tools import SopelMemory
-from sopel.module import commands, interval, NOLIMIT, require_privmsg, require_admin
+from sopel.module import commands, interval, NOLIMIT, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
 
 
@@ -168,7 +169,6 @@ def __removeOldHashesFromDatabase(bot):
 @require_admin
 @commands('rssadd')
 def rssadd(bot, trigger):
-
     # check parameters
     if trigger.group(3) is None or trigger.group(4) is None or trigger.group(5) is None or not trigger.group(6) is None:
         bot.say('syntax: {}{} <channel> <name> <url>'.format(bot.config.core.prefix, trigger.group(1)))
@@ -314,8 +314,8 @@ def __updateFeed(bot, feedname, chatty):
         if chatty or new_item:
             if new_item:
                 bot.memory['rss']['hashes'][feedname].append(hash)
-            message = '\u0002[' + feedname + ']\u000F '
-            message += item['title'] + ' \u0002→\u000F ' + item['link']
+            message = bold('[' + feedname + ']') + ' '
+            message += item['title'] + ' ' + bold('→') + ' ' + item['link']
             bot.say(message, channel)
 
     # write config to disk after new hashes have been calculated
