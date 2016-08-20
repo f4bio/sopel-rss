@@ -51,8 +51,8 @@ def test_dbCheckIfTableExists_fails(bot):
 
 def test_feedAdd_create_db_table(bot):
     rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    result = rss.__dbCheckIfTableExists(bot, rss.__hashTableName('feed'))
-    assert result == [(rss.__hashTableName('feed'),)]
+    result = rss.__dbCheckIfTableExists(bot, rss.__hashTablename('feed'))
+    assert result == [(rss.__hashTablename('feed'),)]
 
 
 def test_feedAdd_create_ring_buffer(bot):
@@ -101,13 +101,13 @@ def test_feedDelete_delete_feed(bot):
     assert 'feed' not in bot.memory['rss']['feeds']
 
 
-def test_hashEntry_works():
-    hash = rss.__hashEntry('thisisatest')
+def test_hashString_works():
+    hash = rss.__hashString('thisisatest')
     assert hash == 'f830f69d23b8224b512a0dc2f5aec974'
 
 
-def test_hashTableName_works():
-    hash = rss.__hashTableName('thisisatest')
+def test_hashTablename_works():
+    hash = rss.__hashTablename('thisisatest')
     assert hash == 'rss_f830f69d23b8224b512a0dc2f5aec974'
 
 

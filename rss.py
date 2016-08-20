@@ -204,7 +204,7 @@ def __configRead(bot):
             # create new RingBuffer for hashes of feed items
             bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
 
-            tablename = __hashTableName(feedname)
+            tablename = __hashTablename(feedname)
             result = __dbCheckIfTableExists(bot, tablename)
 
             # create hash table for this feed in sqlite3 database provided by the sopel framework
@@ -267,7 +267,7 @@ def __dbCheckIfTableExists(bot, tablename):
 
 
 def __dbRemoveOldHashesFromDatabase(bot, feedname):
-    tablename = __hashTableName(feedname)
+    tablename = __hashTablename(feedname)
 
     # make sure the database has no more than MAX_HASHES_PER_FEED rows
     # get the number of rows
@@ -292,7 +292,7 @@ def __dbRemoveOldHashesFromDatabase(bot, feedname):
 
 
 def __dbSaveHashesToDatabase(bot, feedname):
-    tablename = __hashTableName(feedname)
+    tablename = __hashTablename(feedname)
     hashes = bot.memory['rss']['hashes'][feedname].get()
 
     # INSERT OR IGNORE is the short form of INSERT ON CONFLICT IGNORE
@@ -308,7 +308,7 @@ def __dbSaveHashesToDatabase(bot, feedname):
 
 
 def __feedAdd(bot, channel, feedname, url):
-    tablename = __hashTableName(feedname)
+    tablename = __hashTablename(feedname)
 
     # create hash table for this feed in sqlite3 database provided by the sopel framework
     # use UNIQUE for column hash to minimize database writes by using
@@ -360,7 +360,7 @@ def __feedDelete(bot, feedname):
     message = '[INFO] deleted ring buffer for feed "{}"'.format(feedname)
     __logmsg(message)
 
-    tablename = __hashTableName(feedname)
+    tablename = __hashTablename(feedname)
     sql_drop_table = "DROP TABLE '{}'".format(tablename)
     bot.db.execute(sql_drop_table)
     message = '[INFO] dropped sqlite table "{}" of feed "{}"'.format(tablename, feedname)
@@ -385,7 +385,7 @@ def __feedUpdate(bot, feedname, chatty):
 
     # say new or all items
     for item in reversed(feed['entries']):
-        hash = __hashEntry(feedname + item['title'] + item['link'] + item['summary'])
+        hash = __hashString(feedname + item['title'] + item['link'] + item['summary'])
         new_item = not hash in bot.memory['rss']['hashes'][feedname].get()
         if chatty or new_item:
             if new_item:
@@ -398,13 +398,13 @@ def __feedUpdate(bot, feedname, chatty):
     __configSave(bot)
 
 
-def __hashEntry(entry):
-    return hashlib.md5(entry.encode('utf-8')).hexdigest()
+def __hashString(string):
+    return hashlib.md5(string.encode('utf-8')).hexdigest()
 
 
-def __hashTableName(name):
+def __hashTablename(tablename):
     # we need to hash the name of the table as sqlite3 does not permit to substitute table names
-    return 'rss_' + hashlib.md5(name.encode('utf-8')).hexdigest()
+    return 'rss_' + __hashString(tablename)
 
 
 def __logmsg(message):
