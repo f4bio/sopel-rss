@@ -13,7 +13,7 @@ import types
 def bot(request):
     # init bot mock
     bot = MockSopel('Sopel')
-    bot = rss.__config_define(bot)
+    bot = rss.__configDefine(bot)
 
     # init db mock
     bot.config.core.db_filename = tempfile.mkstemp()[1]
@@ -37,67 +37,67 @@ def bot(request):
     return bot
 
 
-def test_rssadd_check_feed_valid_feed(bot):
-    result = rss.__rssadd_check_feed(bot, '#newchannel', 'newname')
-    assert result == 'valid'
+def test_dbCheckIfTableExists_passes(bot):
+    sql_create_table = "CREATE TABLE 'tablename' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)"
+    bot.db.execute(sql_create_table)
+    result = rss.__dbCheckIfTableExists(bot, 'tablename')
+    assert result == [('tablename',)]
 
 
-def test_rssadd_check_feed_double_feedname(bot):
-    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    result = rss.__rssadd_check_feed(bot, '#newchannel', 'feed')
-    assert result == 'feed name "feed" is already in use, please choose a different name'
+def test_dbCheckIfTableExists_fails(bot):
+    result = rss.__dbCheckIfTableExists(bot, 'tablename')
+    assert result == []
 
 
-def test_rssadd_check_feed_channel_must_start_with_hash(bot):
-    result = rss.__rssadd_check_feed(bot, 'nohashchar', 'newname')
-    assert result == 'channel "nohashchar" must start with a "#"'
-
-
-def test_addFeed_create_db_table(bot):
-    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    result = rss.__db_check_if_table_exists(bot, rss.__hashTableName('feed'))
+def test_feedAdd_create_db_table(bot):
+    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    result = rss.__dbCheckIfTableExists(bot, rss.__hashTableName('feed'))
     assert result == [(rss.__hashTableName('feed'),)]
 
 
-def test_addFeed_create_ring_buffer(bot):
-    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+def test_feedAdd_create_ring_buffer(bot):
+    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
     assert type(bot.memory['rss']['hashes']['feed']) == rss.RingBuffer
 
 
-def test_addFeed_create_feed(bot):
-    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+def test_feedAdd_create_feed(bot):
+    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
     feed = bot.memory['rss']['feeds']['feed']
     assert feed == {'name': 'feed', 'url': 'http://www.site.com/feed', 'channel': 'channel'}
 
 
-def test_db_check_if_table_exists_passes(bot):
-    sql_create_table = "CREATE TABLE 'tablename' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)"
-    bot.db.execute(sql_create_table)
-    result = rss.__db_check_if_table_exists(bot, 'tablename')
-    assert result == [('tablename',)]
+def test_feedCheck_valid(bot):
+    result = rss.__feedCheck(bot, '#newchannel', 'newname')
+    assert result == 'valid'
 
 
-def test_db_check_if_table_exists_fails(bot):
-    result = rss.__db_check_if_table_exists(bot, 'tablename')
+def test_feedCheck_feedname_duplicate(bot):
+    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    result = rss.__feedCheck(bot, '#newchannel', 'feed')
+    assert result == 'feed name "feed" is already in use, please choose a different name'
+
+
+def test_feedCheck_channel_must_start_with_hash(bot):
+    result = rss.__feedCheck(bot, 'nohashchar', 'newname')
+    assert result == 'channel "nohashchar" must start with a "#"'
+
+
+def test_feedDelete_delete_db_table(bot):
+    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    rss.__feedDelete(bot, 'feed')
+    result = rss.__dbCheckIfTableExists(bot, 'feed')
     assert result == []
 
 
-def test_deleteFeed_delete_db_table(bot):
-    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    rss.__deleteFeed(bot, 'feed')
-    result = rss.__db_check_if_table_exists(bot, 'feed')
-    assert result == []
-
-
-def test_deleteFeed_delete_ring_buffer(bot):
-    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    rss.__deleteFeed(bot, 'feed')
+def test_feedDelete_delete_ring_buffer(bot):
+    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    rss.__feedDelete(bot, 'feed')
     assert 'feed' not in bot.memory['rss']['hashes']
 
 
-def test_deleteFeed_delete_feed(bot):
-    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    rss.__deleteFeed(bot, 'feed')
+def test_feedDelete_delete_feed(bot):
+    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    rss.__feedDelete(bot, 'feed')
     assert 'feed' not in bot.memory['rss']['feeds']
 
 
