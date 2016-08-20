@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+from sopel.db import SopelDB
+from sopel.formatting import bold
 from sopel.modules import rss
 from sopel.test_tools import MockSopel, MockConfig
-from sopel.db import SopelDB
+import feedparser
 import os
 import pytest
-import sqlite3
 import tempfile
 import types
 
@@ -20,13 +21,19 @@ def bot(request):
     bot.db = SopelDB(bot.config)
 
     # add some data
-    bot.memory['rss']['feeds']['feed1'] = '#channel1 feed1 http://www.site1.com/feed'
-    bot.memory['rss']['feeds']['feed2'] = '#channel2 feed2 http://www.site2.com/feed'
-    bot.memory['rss']['feeds']['feed3'] = '#channel3 feed3 http://www.site3.com/feed'
+    bot.memory['rss']['feeds']['feed1'] = {'channel': '#channel1', 'name': 'feed1', 'url': 'http://www.site1.com/feed'}
+    bot.memory['rss']['feeds']['feed2'] = {'channel': '#channel2', 'name': 'feed2', 'url': 'http://www.site2.com/feed'}
+    bot.memory['rss']['feeds']['feed3'] = {'channel': '#channel3', 'name': 'feed3', 'url': 'http://www.site3.com/feed'}
+
+    bot.memory['rss']['hashes']['feed1'] = rss.RingBuffer(100)
+    bot.memory['rss']['hashes']['feed2'] = rss.RingBuffer(100)
+    bot.memory['rss']['hashes']['feed3'] = rss.RingBuffer(100)
+
+    bot.output = ''
 
     # monkey patch bot instance
-    def say(self, message):
-        print(message)
+    def say(self, message, channel=''):
+        bot.output += message + "\n"
     bot.say = types.MethodType(say, bot)
 
     # teardown method
@@ -35,6 +42,12 @@ def bot(request):
     request.addfinalizer(fin)
 
     return bot
+
+
+@pytest.fixture(scope="function")
+def feedreader():
+    feedreader = MockFeedReader()
+    return feedreader
 
 
 def test_dbCheckIfTableExists_passes(bot):
@@ -101,6 +114,27 @@ def test_feedDelete_delete_feed(bot):
     assert 'feed' not in bot.memory['rss']['feeds']
 
 
+def test_feedUpdate_print_messages(bot, feedreader):
+    rss.__feedUpdate(bot, feedreader, 'feed1', True)
+    expected = bold('[feed1]') + ' Title 1 ' + bold('→') + " https://www.site1.com/article1\n" + bold('[feed1]') + ' Title 2 ' + bold('→') + " https://www.site1.com/article2\n" + bold('[feed1]') + ' Title 3 ' + bold('→') + " https://www.site1.com/article3\n"
+    output = bot.output
+    assert expected == output
+
+
+def test_feedUpdate_store_hashes(bot, feedreader):
+    rss.__feedUpdate(bot, feedreader, 'feed1', True)
+    expected = ['463f9357db6c20a94a68f9c9ef3bb0fb', 'af2110eedcbb16781bb46d8e7ca293fe', '309be3bef1ff3e13e9dbfc010b25fd9c']
+    hashes = bot.memory['rss']['hashes']['feed1'].get()
+    assert expected == hashes
+
+
+def test_feedUpdate_no_update(bot, feedreader):
+    rss.__feedUpdate(bot, feedreader, 'feed1', True)
+    bot.output = ''
+    rss.__feedUpdate(bot, feedreader, 'feed1', False)
+    assert bot.output == ''
+
+
 def test_hashString_works():
     hash = rss.__hashString('thisisatest')
     assert hash == 'f830f69d23b8224b512a0dc2f5aec974'
@@ -126,3 +160,53 @@ def test_RingBuffer_overflow():
     assert rb.get() == ['hash1', 'hash2', 'hash3']
     rb.append('hash4')
     assert rb.get() == ['hash2', 'hash3', 'hash4']
+
+
+# Implementing a mock rss feed reader
+class MockFeedReader:
+    def read(self):
+        rawdata='''<?xml version="1.0" encoding="utf-8" ?>
+<rss version="2.0" xml:base="https://www.site1.com/feed" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<channel>
+<title>Site 1 Articles</title>
+<link>https://www.site1.com/feed</link>
+<description></description>
+<language>en</language>
+
+<item>
+<title>Title 3</title>
+<link>https://www.site1.com/article3</link>
+<description>&lt;p&gt;Summary of article 3&lt;/p&gt;</description>
+<comments>https://www.site1.com/article3#comments</comments>
+<category domain="https://www.site1.com/term/2">Term 2</category>
+<pubDate>Sat, 20 Aug 2016 03:00:00 +0000</pubDate>
+<dc:creator />
+<guid isPermaLink="false">3 at https://www.site1.com/</guid>
+</item>
+
+<item>
+<title>Title 2</title>
+<link>https://www.site1.com/article2</link>
+<description>&lt;p&gt;Summary of article 2&lt;/p&gt;</description>
+<comments>https://www.site1.com/article2#comments</comments>
+<category domain="https://www.site1.com/term/1">Term 1</category>
+<pubDate>Sat, 20 Aug 2016 01:00:00 +0000</pubDate>
+<dc:creator />
+<guid isPermaLink="false">2 at https://www.site1.com/</guid>
+</item>
+
+<item>
+<title>Title 1</title>
+<link>https://www.site1.com/article1</link>
+<description>&lt;p&gt;Summary of article 1&lt;/p&gt;</description>
+<comments>https://www.site1.com/article1#comments</comments>
+<category domain="https://www.site1.com/term/1">Term 1</category>
+<pubDate>Sat, 20 Aug 2016 01:00:00 +0000</pubDate>
+<dc:creator />
+<guid isPermaLink="false">1 at https://www.site1.com/</guid>
+</item>
+
+</channel>
+</rss>'''
+        feed = feedparser.parse(rawdata)
+        return feed

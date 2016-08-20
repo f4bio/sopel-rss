@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 from sopel.formatting import bold
-from sopel.tools import SopelMemory
-from sopel.module import commands, interval, NOLIMIT, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
+from sopel.module import commands, interval, NOLIMIT, require_admin
+from sopel.tools import SopelMemory
 import feedparser
 import hashlib
-from urllib.request import urlopen
 
 
 MAX_HASHES_PER_FEED = 100
@@ -49,18 +48,16 @@ def rssadd(bot, trigger):
         bot.say(result)
         return NOLIMIT
 
-    # check that feed url is online
-    try:
-        with urlopen(url) as f:
-            if f.status == 200:
-                __feedAdd(bot, channel, feedname, url)
-                bot.join(channel)
-    except:
-        message = '[ERROR] unable to add feed "{}"'.format(url)
+    feedreader = FeedReader(url)
+    feed = feedreader.read()
+    if not feed:
+        message = '[ERROR] unable to read url "{}"'.format(url)
         __logmsg(message)
-        bot.say(message)
+        bot.say(message, bot.memory['rss']['monitoring_channel'])
         return NOLIMIT
 
+    __feedAdd(bot, channel, feedname, url)
+    bot.join(channel)
     __configSave(bot)
     return NOLIMIT
 
@@ -96,10 +93,10 @@ def rssget(bot, trigger):
         bot.say('syntax: {}{} <name> [all]'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
 
+    feedname = trigger.group(3)
+
     # if chatty is True then the bot will post feed items to a channel
     chatty = False
-
-    feedname = trigger.group(3)
 
     if feedname not in bot.memory['rss']['feeds']:
         bot.say('feed {} doesn\'t exist'.format(feedname))
@@ -108,8 +105,10 @@ def rssget(bot, trigger):
     if (trigger.group(4) and trigger.group(4) == 'all'):
         chatty = True
 
-    __feedUpdate(bot, feedname, chatty)
-
+    url = bot.memory['rss']['feeds'][feedname]['url']
+    feedreader = FeedReader(url)
+    __feedUpdate(bot, feedreader, feedname, chatty)
+    __configSave(bot)
     return NOLIMIT
 
 
@@ -160,7 +159,10 @@ def rsslist(bot, trigger):
 @interval(60)
 def rssupdate(bot):
     for feedname in bot.memory['rss']['feeds']:
-        __feedUpdate(bot, feedname, False)
+        url = bot.memory['rss']['feeds'][feedname]['url']
+        feedreader = FeedReader(url)
+        __feedUpdate(bot, feedreader, feedname, False)
+        __configSave(bot)
 
 
 def __configDefine(bot):
@@ -367,23 +369,19 @@ def __feedDelete(bot, feedname):
     __logmsg(message)
 
 
-def __feedRead(bot, feedname):
-    url = bot.memory['rss']['feeds'][feedname]['url']
-    try:
-        feed = feedparser.parse(url)
-    except:
+def __feedUpdate(bot, feedreader, feedname, chatty):
+    feed = feedreader.read()
+
+    if not feed:
+        url = bot.memory['rss']['feeds'][feedname]['url']
         message = '[ERROR] unable to read url "{}" of feed "{}"'.format(url, feedname)
         __logmsg(message)
         bot.say(message, bot.memory['rss']['monitoring_channel'])
         return NOLIMIT
-    return feed
 
-
-def __feedUpdate(bot, feedname, chatty):
-    feed = __feedRead(bot, feedname)
     channel = bot.memory['rss']['feeds'][feedname]['channel']
 
-    # say new or all items
+    # bot.say new or all items
     for item in reversed(feed['entries']):
         hash = __hashString(feedname + item['title'] + item['link'] + item['summary'])
         new_item = not hash in bot.memory['rss']['hashes'][feedname].get()
@@ -393,9 +391,6 @@ def __feedUpdate(bot, feedname, chatty):
             message = bold('[' + feedname + ']') + ' '
             message += item['title'] + ' ' + bold('→') + ' ' + item['link']
             bot.say(message, channel)
-
-    # write config to disk after new hashes have been calculated
-    __configSave(bot)
 
 
 def __hashString(string):
@@ -411,7 +406,20 @@ def __logmsg(message):
     print ('[sopel-rss] ' + message)
 
 
-# Implementing a Ring Buffer
+# Implementing an rss feed reader for dependency injection
+class FeedReader:
+    def __init__(self, url):
+        self.url = url
+
+    def read(self):
+        try:
+            feed = feedparser.parse(self.url)
+            return feed
+        except:
+            return False
+
+
+# Implementing a ring buffer
 # https://www.safaribooksonline.com/library/view/python-cookbook/0596001673/ch05s19.html
 class RingBuffer:
     """ class that implements a not-yet-full buffer """
