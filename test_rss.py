@@ -70,10 +70,16 @@ def test_addFeed_create_feed(bot):
     assert feed == {'name': 'feed', 'url': 'http://www.site.com/feed', 'channel': 'channel'}
 
 
-#def test_db_check_if_table_exists(bot):
-#    tablename
-#    sql_create
+def test_db_check_if_table_exists_passes(bot):
+    sql_create_table = "CREATE TABLE 'tablename' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)"
+    bot.db.execute(sql_create_table)
+    result = rss.__db_check_if_table_exists(bot, 'tablename')
+    assert result == [('tablename',)]
 
+
+def test_db_check_if_table_exists_fails(bot):
+    result = rss.__db_check_if_table_exists(bot, 'tablename')
+    assert result == []
 
 
 def test_hashEntry_works():
