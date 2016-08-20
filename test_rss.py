@@ -46,45 +46,56 @@ def feedreader():
     return feedreader
 
 
-def test_configDefine():
-    pass
+def test_configDefine_SopelMemory():
+    bot = MockSopel('Sopel')
+    bot = rss.__configDefine(bot)
+    assert type(bot.memory['rss']) == rss.SopelMemory
 
 
-def test_configRead():
-    pass
+def test_configDefine_monitoring_channel():
+    bot = MockSopel('Sopel')
+    bot = rss.__configDefine(bot)
+    assert bot.memory['rss']['monitoring_channel'] == ''
 
 
-def test_configSave():
-    pass
+def test_configDefine_feeds():
+    bot = MockSopel('Sopel')
+    bot = rss.__configDefine(bot)
+    assert type(bot.memory['rss']['feeds']) == dict
 
 
-def test_dbCheckIfTableExists_passes(bot):
-    sql_create_table = "CREATE TABLE 'tablename' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)"
-    bot.db.execute(sql_create_table)
-    result = rss.__dbCheckIfTableExists(bot, 'tablename')
-    assert result == [('tablename',)]
+def test_configDefine_hashes():
+    bot = MockSopel('Sopel')
+    bot = rss.__configDefine(bot)
+    assert type(bot.memory['rss']['hashes']) == dict
 
 
-def test_dbCheckIfTableExists_fails(bot):
-    result = rss.__dbCheckIfTableExists(bot, 'tablename')
+def test_dbCreateTable_and_dbCheckIfTableExists(bot):
+    rss.__dbCreateTable(bot, 'feedname')
+    result = rss.__dbCheckIfTableExists(bot, 'feedname')
+    assert result == [(rss.__hashTablename('feedname'),)]
+
+
+def test_dbDropTable(bot):
+    rss.__dbCreateTable(bot, 'feedname')
+    rss.__dbDropTable(bot, 'feedname')
+    result = rss.__dbCheckIfTableExists(bot, 'feedname')
     assert result == []
 
 
 def test_dbGetNumerOfRows(bot):
     ROWS = 10
-    tablename = rss.__hashTablename('feedname')
     rss.__feedAdd(bot, '#channel', 'feedname', 'feedurl')
     for i in range(ROWS):
         hash = rss.__hashString(str(i))
         bot.memory['rss']['hashes']['feedname'].append(hash)
     rss.__dbSaveHashesToDatabase(bot, 'feedname')
-    rows_feed = rss.__dbGetNumberOfRows(bot, tablename)
+    rows_feed = rss.__dbGetNumberOfRows(bot, 'feedname')
     assert rows_feed == ROWS
 
 
 def test_dbRemoveOldHashesFromDatabase(bot):
     SURPLUS_ROWS = 10
-    tablename = rss.__hashTablename('feedname')
     rss.__feedAdd(bot, '#channel', 'feedname', 'feedurl')
     bot.memory['rss']['hashes']['feedname'] = rss.RingBuffer(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS)
     for i in range(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS):
@@ -92,7 +103,7 @@ def test_dbRemoveOldHashesFromDatabase(bot):
         bot.memory['rss']['hashes']['feedname'].append(hash)
     rss.__dbSaveHashesToDatabase(bot, 'feedname')
     rss.__dbRemoveOldHashesFromDatabase(bot, 'feedname')
-    rows_feed = rss.__dbGetNumberOfRows(bot, tablename)
+    rows_feed = rss.__dbGetNumberOfRows(bot, 'feedname')
     assert rows_feed == rss.MAX_HASHES_PER_FEED
 
 
@@ -100,27 +111,26 @@ def test_dbSaveHashesToDatabase(bot, feedreader):
     rss.__feedAdd(bot, '#channel', 'feedname', 'feedurl')
     rss.__feedUpdate(bot, feedreader, 'feedname', True)
     rss.__dbSaveHashesToDatabase(bot, 'feedname')
-    sql_read_hashes = 'SELECT * FROM ' + rss.__hashTablename('feedname')
-    result = bot.db.execute(sql_read_hashes).fetchall()
+    hashes = rss.__dbReadHashesFromDatabase(bot, 'feedname')
     expected = [(1, '63a03d3de497c75afa1fef0250595946'), (2, '2cc0fcae6d21bfed13314c10089d007d'), (3, 'c1d413bba94540cda87ec8ab1113b95c')]
-    assert expected == result
+    assert expected == hashes
 
 
 def test_feedAdd_create_db_table(bot):
-    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    result = rss.__dbCheckIfTableExists(bot, rss.__hashTablename('feed'))
-    assert result == [(rss.__hashTablename('feed'),)]
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    result = rss.__dbCheckIfTableExists(bot, 'feedname')
+    assert result == [(rss.__hashTablename('feedname'),)]
 
 
 def test_feedAdd_create_ring_buffer(bot):
-    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    assert type(bot.memory['rss']['hashes']['feed']) == rss.RingBuffer
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    assert type(bot.memory['rss']['hashes']['feedname']) == rss.RingBuffer
 
 
 def test_feedAdd_create_feed(bot):
-    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    feed = bot.memory['rss']['feeds']['feed']
-    assert feed == {'name': 'feed', 'url': 'http://www.site.com/feed', 'channel': 'channel'}
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    feed = bot.memory['rss']['feeds']['feedname']
+    assert feed == {'name': 'feedname', 'url': 'http://www.site.com/feed', 'channel': '#channel'}
 
 
 def test_feedCheck_valid(bot):
@@ -140,16 +150,16 @@ def test_feedCheck_channel_must_start_with_hash(bot):
 
 
 def test_feedDelete_delete_db_table(bot):
-    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    rss.__feedDelete(bot, 'feed')
-    result = rss.__dbCheckIfTableExists(bot, 'feed')
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    rss.__feedDelete(bot, 'feedname')
+    result = rss.__dbCheckIfTableExists(bot, 'feedname')
     assert result == []
 
 
 def test_feedDelete_delete_ring_buffer(bot):
-    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
-    rss.__feedDelete(bot, 'feed')
-    assert 'feed' not in bot.memory['rss']['hashes']
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    rss.__feedDelete(bot, 'feedname')
+    assert 'feedname' not in bot.memory['rss']['hashes']
 
 
 def test_feedDelete_delete_feed(bot):

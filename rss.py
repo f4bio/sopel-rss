@@ -206,19 +206,16 @@ def __configRead(bot):
             # create new RingBuffer for hashes of feed items
             bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
 
-            tablename = __hashTablename(feedname)
-            result = __dbCheckIfTableExists(bot, tablename)
+            result = __dbCheckIfTableExists(bot, feedname)
 
             # create hash table for this feed in sqlite3 database provided by the sopel framework
             # use UNIQUE for column hash to minimize database writes by using
             # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
             if not result:
-                sql_create_table = "CREATE TABLE '{}' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)".format(tablename)
-                bot.db.execute(sql_create_table)
+                __dbCreateTable(bot, feedname)
 
             # read hashes from database to memory
-            sql_hashes = "SELECT * FROM '{}'".format(tablename)
-            hashes = bot.db.execute(sql_hashes).fetchall()
+            hashes = __dbReadHashesFromDatabase(bot, feedname)
 
             # each hash in hashes consists of
             # hash[0]: id
@@ -263,19 +260,43 @@ def __configSave(bot):
         __logmsg(message)
 
 
-def __dbCheckIfTableExists(bot, tablename):
+def __dbCheckIfTableExists(bot, feedname):
+    tablename = __hashTablename(feedname)
     sql_check_table = "SELECT name FROM sqlite_master WHERE type='table' AND name=(?)"
     return bot.db.execute(sql_check_table, (tablename,)).fetchall()
 
 
-def __dbGetNumberOfRows(bot, tablename):
+def __dbCreateTable(bot, feedname):
+    tablename = __hashTablename(feedname)
+
+    # create hash table for this feed in sqlite3 database provided by the sopel framework
+    # use UNIQUE for column hash to minimize database writes by using
+    # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
+    sql_create_table = "CREATE TABLE '{}' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)".format(tablename)
+    bot.db.execute(sql_create_table)
+
+
+def __dbDropTable(bot, feedname):
+    tablename = __hashTablename(feedname)
+    sql_drop_table = "DROP TABLE '{}'".format(tablename)
+    bot.db.execute(sql_drop_table)
+
+
+def __dbGetNumberOfRows(bot, feedname):
+    tablename = __hashTablename(feedname)
     sql_count_hashes = "SELECT count(*) FROM '{}'".format(tablename)
     return bot.db.execute(sql_count_hashes).fetchall()[0][0]
 
 
+def __dbReadHashesFromDatabase(bot, feedname):
+    tablename = __hashTablename(feedname)
+    sql_hashes = "SELECT * FROM '{}'".format(tablename)
+    return bot.db.execute(sql_hashes).fetchall()
+
+
 def __dbRemoveOldHashesFromDatabase(bot, feedname):
     tablename = __hashTablename(feedname)
-    rows = __dbGetNumberOfRows(bot, tablename)
+    rows = __dbGetNumberOfRows(bot, feedname)
 
     if rows > MAX_HASHES_PER_FEED:
 
@@ -312,12 +333,7 @@ def __dbSaveHashesToDatabase(bot, feedname):
 
 def __feedAdd(bot, channel, feedname, url):
     tablename = __hashTablename(feedname)
-
-    # create hash table for this feed in sqlite3 database provided by the sopel framework
-    # use UNIQUE for column hash to minimize database writes by using
-    # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
-    sql_create_table = "CREATE TABLE '{}' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)".format(tablename)
-    bot.db.execute(sql_create_table)
+    __dbCreateTable(bot, feedname)
 
     message = '[INFO] added sqlite table "{}" for feed "{}"'.format(tablename, feedname)
     __logmsg(message)
@@ -350,6 +366,7 @@ def __feedCheck(bot, channel, feedname):
 
 
 def __feedDelete(bot, feedname):
+    tablename = __hashTablename(feedname)
     channel = bot.memory['rss']['feeds'][feedname]['channel']
     url = bot.memory['rss']['feeds'][feedname]['url']
     del(bot.memory['rss']['feeds'][feedname])
@@ -359,13 +376,10 @@ def __feedDelete(bot, feedname):
 
     # create new RingBuffer for hashes of feed items
     del(bot.memory['rss']['hashes'][feedname])
-
     message = '[INFO] deleted ring buffer for feed "{}"'.format(feedname)
     __logmsg(message)
 
-    tablename = __hashTablename(feedname)
-    sql_drop_table = "DROP TABLE '{}'".format(tablename)
-    bot.db.execute(sql_drop_table)
+    __dbDropTable(bot, feedname)
     message = '[INFO] dropped sqlite table "{}" of feed "{}"'.format(tablename, feedname)
     __logmsg(message)
 
