@@ -163,6 +163,32 @@ def __update(bot):
         __updateFeed(bot, feedname, False)
 
 
+def __addFeed(bot, channel, feedname, url):
+    tablename = __hashTableName(feedname)
+
+    # create hash table for this feed in sqlite3 database provided by the sopel framework
+    # use UNIQUE for column hash to minimize database writes by using
+    # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
+    sql_create_table = "CREATE TABLE '{}' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)".format(tablename)
+    bot.db.execute(sql_create_table)
+
+    message = '[INFO] added sqlite table "{}" for feed "{}"'.format(tablename, feedname)
+    __logmsg(message)
+
+    # create new RingBuffer for hashes of feed items
+    bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
+
+    message = '[INFO] added ring buffer for feed "{}"'.format(feedname)
+    __logmsg(message)
+
+    # create new dict for feed properties
+    bot.memory['rss']['feeds'][feedname] = { 'channel': channel, 'name': feedname, 'url': url }
+
+    message = '[INFO] added to channel "{}" rss feed "{}" with url "{}"'.format(channel, feedname, url)
+    __logmsg(message)
+    bot.say(message)
+
+
 # read config from disk to memory
 def __config_read(bot):
     # read 'monitoring_channel' from config file
@@ -239,32 +265,6 @@ def __config_save(bot):
     except:
         message = '[ERROR] unable to save config to disk!'
         __logmsg(message)
-
-
-def __addFeed(bot, channel, feedname, url):
-    tablename = __hashTableName(feedname)
-
-    # create hash table for this feed in sqlite3 database provided by the sopel framework
-    # use UNIQUE for column hash to minimize database writes by using
-    # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
-    sql_create_table = "CREATE TABLE '{}' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)".format(tablename)
-    bot.db.execute(sql_create_table)
-
-    message = '[INFO] added sqlite table "{}" for feed "{}"'.format(tablename, feedname)
-    __logmsg(message)
-
-    # create new RingBuffer for hashes of feed items
-    bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
-
-    message = '[INFO] added ring buffer for feed "{}"'.format(feedname)
-    __logmsg(message)
-
-    # create new dict for feed properties
-    bot.memory['rss']['feeds'][feedname] = { 'channel': channel, 'name': feedname, 'url': url }
-
-    message = '[INFO] added to channel "{}" rss feed "{}" with url "{}"'.format(channel, feedname, url)
-    __logmsg(message)
-    bot.say(message)
 
 
 def __db_check_if_table_exists(bot, tablename):
