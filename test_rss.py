@@ -8,23 +8,23 @@ import pytest
 @pytest.fixture
 def bot():
     bot = MockSopel('Sopel')
-    bot = rss.__setup_define(bot)
+    bot = rss.__config_define(bot)
     bot.memory['rss']['feeds']['CNBC'] = '#sopel-dev CNBC http://www.cnbc.com/id/100003114/device/rss/rss.html'
     return bot
 
 
-def test_rssadd_check_feedname_valid_feed(bot):
-    result = rss.__rssadd_check_feedname(bot, '#newchannel', 'newname')
+def test_rssadd_check_feed_valid_feed(bot):
+    result = rss.__rssadd_check_feed(bot, '#newchannel', 'newname')
     assert result == 'valid'
 
 
-def test_rssadd_check_feedname_double_feedname(bot):
-    result = rss.__rssadd_check_feedname(bot, '#newchannel', 'CNBC')
+def test_rssadd_check_feed_double_feedname(bot):
+    result = rss.__rssadd_check_feed(bot, '#newchannel', 'CNBC')
     assert result == 'feed name "CNBC" is already in use, please choose a different name'
 
 
-def test_rssadd_check_feedname_channel_must_start_with_hash(bot):
-    result = rss.__rssadd_check_feedname(bot, 'nochannel', 'newname')
+def test_rssadd_check_feed_channel_must_start_with_hash(bot):
+    result = rss.__rssadd_check_feed(bot, 'nochannel', 'newname')
     assert result == 'channel "nochannel" must start with a "#"'
 
 
@@ -43,6 +43,7 @@ def test_RingBuffer_append():
     assert rb.get() == []
     rb.append('1')
     assert rb.get() == ['1']
+
 
 def test_RingBuffer_overflow():
     rb = rss.RingBuffer(3)

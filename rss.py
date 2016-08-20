@@ -24,17 +24,11 @@ def configure(config):
 
 
 def setup(bot):
-
-    # define bot
-    bot = __setup_define(bot)
-
-    # read config from disk to memory
+    bot = __config_define(bot)
     __config_read(bot)
 
 
 def shutdown(bot):
-
-    # write config from memory to disk
     __config_save(bot)
 
 
@@ -348,7 +342,7 @@ def __removeOldHashesFromDatabase(bot):
                 bot.db.execute(sql_delete_hashes, (str(row[0]),))
 
 
-def __rssadd_check_feedname(bot, channel, feedname):
+def __rssadd_check_feed(bot, channel, feedname):
 
     # check that feed name is unique
     if feedname in bot.memory['rss']['feeds']:
@@ -378,7 +372,7 @@ def __saveHashesToDatabase(bot):
                 pass
 
 
-def __setup_define(bot):
+def __config_define(bot):
 
     # define new config section 'rss'
     bot.config.define_section('rss', RSSSection)
