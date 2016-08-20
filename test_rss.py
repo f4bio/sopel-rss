@@ -23,6 +23,8 @@ def bot(request):
     # add some data
     bot.memory['rss']['feeds']['feed1'] = {'channel': '#channel1', 'name': 'feed1', 'url': 'http://www.site1.com/feed'}
     bot.memory['rss']['hashes']['feed1'] = rss.RingBuffer(100)
+    sql_create_table = 'CREATE TABLE ' + rss.__hashTablename('feed1') + ' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)'
+    bot.db.execute(sql_create_table)
 
     # initialize variable which will store every bot.say
     bot.output = ''
@@ -70,6 +72,10 @@ def test_configDefine_hashes():
     assert type(bot.memory['rss']['hashes']) == dict
 
 
+def test_configSave(bot):
+    pass
+
+
 def test_dbCreateTable_and_dbCheckIfTableExists(bot):
     rss.__dbCreateTable(bot, 'feedname')
     result = rss.__dbCheckIfTableExists(bot, 'feedname')
@@ -85,34 +91,31 @@ def test_dbDropTable(bot):
 
 def test_dbGetNumerOfRows(bot):
     ROWS = 10
-    rss.__feedAdd(bot, '#channel', 'feedname', 'feedurl')
     for i in range(ROWS):
         hash = rss.__hashString(str(i))
-        bot.memory['rss']['hashes']['feedname'].append(hash)
-    rss.__dbSaveHashesToDatabase(bot, 'feedname')
-    rows_feed = rss.__dbGetNumberOfRows(bot, 'feedname')
+        bot.memory['rss']['hashes']['feed1'].append(hash)
+    rss.__dbSaveHashesToDatabase(bot, 'feed1')
+    rows_feed = rss.__dbGetNumberOfRows(bot, 'feed1')
     assert rows_feed == ROWS
 
 
 def test_dbRemoveOldHashesFromDatabase(bot):
     SURPLUS_ROWS = 10
-    rss.__feedAdd(bot, '#channel', 'feedname', 'feedurl')
-    bot.memory['rss']['hashes']['feedname'] = rss.RingBuffer(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS)
+    bot.memory['rss']['hashes']['feed1'] = rss.RingBuffer(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS)
     for i in range(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS):
         hash = rss.__hashString(str(i))
-        bot.memory['rss']['hashes']['feedname'].append(hash)
-    rss.__dbSaveHashesToDatabase(bot, 'feedname')
-    rss.__dbRemoveOldHashesFromDatabase(bot, 'feedname')
-    rows_feed = rss.__dbGetNumberOfRows(bot, 'feedname')
+        bot.memory['rss']['hashes']['feed1'].append(hash)
+    rss.__dbSaveHashesToDatabase(bot, 'feed1')
+    rss.__dbRemoveOldHashesFromDatabase(bot, 'feed1')
+    rows_feed = rss.__dbGetNumberOfRows(bot, 'feed1')
     assert rows_feed == rss.MAX_HASHES_PER_FEED
 
 
 def test_dbSaveHashesToDatabase(bot, feedreader):
-    rss.__feedAdd(bot, '#channel', 'feedname', 'feedurl')
-    rss.__feedUpdate(bot, feedreader, 'feedname', True)
-    rss.__dbSaveHashesToDatabase(bot, 'feedname')
-    hashes = rss.__dbReadHashesFromDatabase(bot, 'feedname')
-    expected = [(1, '63a03d3de497c75afa1fef0250595946'), (2, '2cc0fcae6d21bfed13314c10089d007d'), (3, 'c1d413bba94540cda87ec8ab1113b95c')]
+    rss.__feedUpdate(bot, feedreader, 'feed1', True)
+    rss.__dbSaveHashesToDatabase(bot, 'feed1')
+    hashes = rss.__dbReadHashesFromDatabase(bot, 'feed1')
+    expected = [(1, '463f9357db6c20a94a68f9c9ef3bb0fb'), (2, 'af2110eedcbb16781bb46d8e7ca293fe'), (3, '309be3bef1ff3e13e9dbfc010b25fd9c')]
     assert expected == hashes
 
 
