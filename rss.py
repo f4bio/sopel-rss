@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
-import feedparser
-import hashlib
-from urllib.request import urlopen
 from sopel.formatting import bold
 from sopel.tools import SopelMemory
 from sopel.module import commands, interval, NOLIMIT, require_admin
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
+import feedparser
+import hashlib
+from urllib.request import urlopen
 
 
 MAX_HASHES_PER_FEED = 100
@@ -187,10 +187,7 @@ def __config_read(bot):
             bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
 
             tablename = __hashTableName(feedname)
-
-            # check if a table for the hashes of this feed exists
-            sql_check_table = "SELECT name FROM sqlite_master WHERE type='table' AND name=(?)"
-            result = bot.db.execute(sql_check_table, (tablename,)).fetchall()
+            result = __db_check_if_table_exists(bot, tablename)
 
             # create hash table for this feed in sqlite3 database provided by the sopel framework
             # use UNIQUE for column hash to minimize database writes by using
@@ -268,6 +265,11 @@ def __addFeed(bot, channel, feedname, url):
     message = '[INFO] added to channel "{}" rss feed "{}" with url "{}"'.format(channel, feedname, url)
     __logmsg(message)
     bot.say(message)
+
+
+def db_check_if_table_exists(bot, tablename):
+    sql_check_table = "SELECT name FROM sqlite_master WHERE type='table' AND name=(?)"
+    return bot.db.execute(sql_check_table, (tablename,)).fetchall()
 
 
 def __deleteFeed(bot, feedname):
