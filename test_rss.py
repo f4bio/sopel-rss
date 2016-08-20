@@ -9,7 +9,7 @@ import sqlite3
 import tempfile
 import types
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def bot(request):
     # init bot mock
     bot = MockSopel('Sopel')
@@ -43,30 +43,37 @@ def test_rssadd_check_feed_valid_feed(bot):
 
 
 def test_rssadd_check_feed_double_feedname(bot):
-    result = rss.__rssadd_check_feed(bot, '#newchannel', 'feed1')
-    assert result == 'feed name "feed1" is already in use, please choose a different name'
+    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    result = rss.__rssadd_check_feed(bot, '#newchannel', 'feed')
+    assert result == 'feed name "feed" is already in use, please choose a different name'
 
 
 def test_rssadd_check_feed_channel_must_start_with_hash(bot):
-    result = rss.__rssadd_check_feed(bot, 'nochannel', 'newname')
-    assert result == 'channel "nochannel" must start with a "#"'
+    result = rss.__rssadd_check_feed(bot, 'nohashchar', 'newname')
+    assert result == 'channel "nohashchar" must start with a "#"'
 
 
 def test_addFeed_create_db_table(bot):
-    rss.__addFeed(bot, 'channel4', 'feed4', 'http://www.site4.com/feed')
-    result = rss.__db_check_if_table_exists(bot, rss.__hashTableName('feed4'))
-    assert result == [(rss.__hashTableName('feed4'),)]
+    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    result = rss.__db_check_if_table_exists(bot, rss.__hashTableName('feed'))
+    assert result == [(rss.__hashTableName('feed'),)]
 
 
 def test_addFeed_create_ring_buffer(bot):
-    rss.__addFeed(bot, 'channel5', 'feed5', 'http://www.site5.com/feed')
-    assert type(bot.memory['rss']['hashes']['feed5']) == rss.RingBuffer
+    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    assert type(bot.memory['rss']['hashes']['feed']) == rss.RingBuffer
 
 
 def test_addFeed_create_feed(bot):
-    rss.__addFeed(bot, 'channel6', 'feed6', 'http://www.site6.com/feed')
-    feed6 = bot.memory['rss']['feeds']['feed6']
-    assert feed6 == {'name': 'feed6', 'url': 'http://www.site6.com/feed', 'channel': 'channel6'}
+    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    feed = bot.memory['rss']['feeds']['feed']
+    assert feed == {'name': 'feed', 'url': 'http://www.site.com/feed', 'channel': 'channel'}
+
+
+#def test_db_check_if_table_exists(bot):
+#    tablename
+#    sql_create
+
 
 
 def test_hashEntry_works():
