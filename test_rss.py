@@ -82,6 +82,25 @@ def test_db_check_if_table_exists_fails(bot):
     assert result == []
 
 
+def test_deleteFeed_delete_db_table(bot):
+    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    rss.__deleteFeed(bot, 'feed')
+    result = rss.__db_check_if_table_exists(bot, 'feed')
+    assert result == []
+
+
+def test_deleteFeed_delete_ring_buffer(bot):
+    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    rss.__deleteFeed(bot, 'feed')
+    assert 'feed' not in bot.memory['rss']['hashes']
+
+
+def test_deleteFeed_delete_feed(bot):
+    rss.__addFeed(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    rss.__deleteFeed(bot, 'feed')
+    assert 'feed' not in bot.memory['rss']['feeds']
+
+
 def test_hashEntry_works():
     hash = rss.__hashEntry('thisisatest')
     assert hash == 'f830f69d23b8224b512a0dc2f5aec974'
