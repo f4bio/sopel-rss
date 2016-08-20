@@ -267,7 +267,7 @@ def __addFeed(bot, channel, feedname, url):
     bot.say(message)
 
 
-def db_check_if_table_exists(bot, tablename):
+def __db_check_if_table_exists(bot, tablename):
     sql_check_table = "SELECT name FROM sqlite_master WHERE type='table' AND name=(?)"
     return bot.db.execute(sql_check_table, (tablename,)).fetchall()
 
