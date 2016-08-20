@@ -268,13 +268,14 @@ def __dbCheckIfTableExists(bot, tablename):
     return bot.db.execute(sql_check_table, (tablename,)).fetchall()
 
 
+def __dbGetNumberOfRows(bot, tablename):
+    sql_count_hashes = "SELECT count(*) FROM '{}'".format(tablename)
+    return bot.db.execute(sql_count_hashes).fetchall()[0][0]
+
+
 def __dbRemoveOldHashesFromDatabase(bot, feedname):
     tablename = __hashTablename(feedname)
-
-    # make sure the database has no more than MAX_HASHES_PER_FEED rows
-    # get the number of rows
-    sql_count_hashes = "SELECT count(*) FROM '{}'".format(tablename)
-    rows = bot.db.execute(sql_count_hashes).fetchall()[0][0]
+    rows = __dbGetNumberOfRows(bot, tablename)
 
     if rows > MAX_HASHES_PER_FEED:
 
@@ -289,7 +290,7 @@ def __dbRemoveOldHashesFromDatabase(bot, feedname):
         for row in bot.db.execute(sql_first_hashes, (str(delete_rows),)).fetchall():
 
             # delete old hashes from database
-            sql_delete_hashes = "DELETE FROM '{}' WHERE '{}.id' = (?)".format(tablename, tablename)
+            sql_delete_hashes = "DELETE FROM '{}' WHERE id = (?)".format(tablename)
             bot.db.execute(sql_delete_hashes, (str(row[0]),))
 
 
