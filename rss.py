@@ -2,23 +2,23 @@
 from __future__ import unicode_literals
 from sopel.formatting import bold
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
+from sopel.logger import get_logger
 from sopel.module import commands, interval, NOLIMIT, require_admin
 from sopel.tools import SopelMemory
 import feedparser
 import hashlib
 
 
+LOGGER = get_logger(__name__)
 MAX_HASHES_PER_FEED = 100
 
 
 class RSSSection(StaticSection):
-    monitoring_channel = ListAttribute('monitoring_channel', default = '')
     feeds = ListAttribute('feeds', default = '')
 
 
 def configure(config):
     config.define_section('rss', RSSSection)
-    config.rss.configure_setting('monitoring_channel', 'channel in which the bot will report errors')
     config.rss.configure_setting('feeds', 'comma separated strings consisting of channel, name and url separated by spaces')
 
 
@@ -51,9 +51,8 @@ def rssadd(bot, trigger):
     feedreader = FeedReader(url)
     feed = feedreader.read()
     if not feed:
-        message = '[ERROR] unable to read url "{}"'.format(url)
-        __logmsg(message)
-        bot.say(message, bot.memory['rss']['monitoring_channel'])
+        message = 'unable to read url "{}"'.format(url)
+        LOGGER.error(message)
         return NOLIMIT
 
     __feedAdd(bot, channel, feedname, url)
@@ -123,10 +122,9 @@ def rssjoin(bot, trigger):
     for feedname, feed in bot.memory['rss']['feeds'].items():
         bot.join(feed['channel'])
 
-    monitoring_channel = bot.memory['rss']['monitoring_channel']
 
-    if monitoring_channel:
-        bot.join(monitoring_channel)
+    if bot.config.core.logging_channel:
+        bot.join(bot.config.core.logging_channel)
 
     return NOLIMIT
 
@@ -170,9 +168,6 @@ def __configDefine(bot):
     bot.config.define_section('rss', RSSSection)
     bot.memory['rss'] = SopelMemory()
 
-    # define string 'monitoring_channel' in memory
-    bot.memory['rss']['monitoring_channel'] = ''
-
     # define dict 'feeds'
     bot.memory['rss']['feeds'] = dict()
 
@@ -184,9 +179,6 @@ def __configDefine(bot):
 
 # read config from disk to memory
 def __configRead(bot):
-    # read 'monitoring_channel' from config file
-    if bot.config.rss.monitoring_channel:
-        bot.memory['rss']['monitoring_channel'] = bot.config.rss.monitoring_channel[0]
 
     # read 'feeds' from config file
     if bot.config.rss.feeds and bot.config.rss.feeds[0]:
@@ -222,6 +214,9 @@ def __configRead(bot):
             for hash in hashes:
                 bot.memory['rss']['hashes'][feedname].append(hash[1])
 
+    message = 'read config from disk'
+    LOGGER.debug(message)
+
 
 # save config from memory to disk
 def __configSave(bot):
@@ -236,9 +231,6 @@ def __configSave(bot):
     for feedname in bot.memory['rss']['feeds']:
         __dbRemoveOldHashesFromDatabase(bot, feedname)
 
-    # save monitoring_channel to config file
-    bot.config.rss.monitoring_channel = [bot.memory['rss']['monitoring_channel']]
-
     # flatten feeds for config file
     feeds = []
     for feedname, feed in bot.memory['rss']['feeds'].items():
@@ -252,11 +244,12 @@ def __configSave(bot):
             bot.config.core.channels += [feed['channel']]
 
     try:
-        # save config file
         bot.config.save()
+        message = 'saved config to disk'
+        LOGGER.debug(message)
     except:
-        message = '[ERROR] unable to save config to disk!'
-        __logmsg(message)
+        message = 'unable to save config to disk!'
+        LOGGER.error(message)
 
 
 def __dbCheckIfTableExists(bot, feedname):
@@ -273,12 +266,16 @@ def __dbCreateTable(bot, feedname):
     # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
     sql_create_table = "CREATE TABLE '{}' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)".format(tablename)
     bot.db.execute(sql_create_table)
+    message = 'added sqlite table "{}" for feed "{}"'.format(tablename, feedname)
+    LOGGER.debug(message)
 
 
 def __dbDropTable(bot, feedname):
     tablename = __hashTablename(feedname)
     sql_drop_table = "DROP TABLE '{}'".format(tablename)
     bot.db.execute(sql_drop_table)
+    message = 'dropped sqlite table "{}" of feed "{}"'.format(tablename, feedname)
+    LOGGER.debug(message)
 
 
 def __dbGetNumberOfRows(bot, feedname):
@@ -290,6 +287,8 @@ def __dbGetNumberOfRows(bot, feedname):
 def __dbReadHashesFromDatabase(bot, feedname):
     tablename = __hashTablename(feedname)
     sql_hashes = "SELECT * FROM '{}'".format(tablename)
+    message = 'read hashes of feed "{}" from sqlite table "{}"'.format(feedname, tablename)
+    LOGGER.debug(message)
     return bot.db.execute(sql_hashes).fetchall()
 
 
@@ -313,6 +312,8 @@ def __dbRemoveOldHashesFromDatabase(bot, feedname):
             sql_delete_hashes = "DELETE FROM '{}' WHERE id = (?)".format(tablename)
             bot.db.execute(sql_delete_hashes, (str(row[0]),))
 
+        message = 'removed {} rows in table "{}" of feed "{}"'.format(str(delete_rows), tablename, feedname)
+        LOGGER.debug(message)
 
 def __dbSaveHashesToDatabase(bot, feedname):
     tablename = __hashTablename(feedname)
@@ -324,6 +325,8 @@ def __dbSaveHashesToDatabase(bot, feedname):
     for hash in hashes:
         try:
             bot.db.execute(sql_save_hashes, (hash,))
+            message = 'saved hashes of feed "{}" to sqlite table "{}"'.format(feedname, tablename)
+            LOGGER.debug(message)
         except:
             # if we have concurrent feed update threads then a database lock may occur
             # this is no problem as the ring buffer will be saved during the next feed update
@@ -334,20 +337,16 @@ def __feedAdd(bot, channel, feedname, url):
     tablename = __hashTablename(feedname)
     __dbCreateTable(bot, feedname)
 
-    message = '[INFO] added sqlite table "{}" for feed "{}"'.format(tablename, feedname)
-    __logmsg(message)
-
     # create new RingBuffer for hashes of feed items
     bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
-
-    message = '[INFO] added ring buffer for feed "{}"'.format(feedname)
-    __logmsg(message)
+    message = 'added ring buffer for feed "{}"'.format(feedname)
+    LOGGER.debug(message)
 
     # create new dict for feed properties
     bot.memory['rss']['feeds'][feedname] = { 'channel': channel, 'name': feedname, 'url': url }
 
-    message = '[INFO] added to channel "{}" rss feed "{}" with url "{}"'.format(channel, feedname, url)
-    __logmsg(message)
+    message = 'added rss feed "{}" to channel "{}" with url "{}"'.format(feedname, channel, url)
+    LOGGER.info(message)
     bot.say(message)
 
 
@@ -369,18 +368,16 @@ def __feedDelete(bot, feedname):
     channel = bot.memory['rss']['feeds'][feedname]['channel']
     url = bot.memory['rss']['feeds'][feedname]['url']
     del(bot.memory['rss']['feeds'][feedname])
-    message = '[INFO] deleted in channel "{}" rss feed "{}" with url "{}"'.format(channel, feedname, url)
-    __logmsg(message)
+    message = 'deleted rss feed "{}" in channel "{}" with url "{}"'.format(feedname, channel, url)
+    LOGGER.info(message)
     bot.say(message)
 
     # create new RingBuffer for hashes of feed items
     del(bot.memory['rss']['hashes'][feedname])
-    message = '[INFO] deleted ring buffer for feed "{}"'.format(feedname)
-    __logmsg(message)
+    message = 'deleted ring buffer for feed "{}"'.format(feedname)
+    LOGGER.debug(message)
 
     __dbDropTable(bot, feedname)
-    message = '[INFO] dropped sqlite table "{}" of feed "{}"'.format(tablename, feedname)
-    __logmsg(message)
 
 
 def __feedUpdate(bot, feedreader, feedname, chatty):
@@ -388,9 +385,8 @@ def __feedUpdate(bot, feedreader, feedname, chatty):
 
     if not feed:
         url = bot.memory['rss']['feeds'][feedname]['url']
-        message = '[ERROR] unable to read url "{}" of feed "{}"'.format(url, feedname)
-        __logmsg(message)
-        bot.say(message, bot.memory['rss']['monitoring_channel'])
+        message = 'unable to read url "{}" of feed "{}"'.format(url, feedname)
+        LOGGER.error(message)
         return NOLIMIT
 
     channel = bot.memory['rss']['feeds'][feedname]['channel']
@@ -414,10 +410,6 @@ def __hashString(string):
 def __hashTablename(tablename):
     # we need to hash the name of the table as sqlite3 does not permit to substitute table names
     return 'rss_' + __hashString(tablename)
-
-
-def __logmsg(message):
-    print ('[sopel-rss] ' + message)
 
 
 # Implementing an rss feed reader for dependency injection

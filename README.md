@@ -56,14 +56,6 @@ The following options can be set in the configuration file. Be aware that the bo
 
 ### monitoring_channel &mdash; status message channel
 
-**Syntax:** *monitoring_channel=\<channel\>*
-
-*Default:* empty
-
-This should be set to a channel in which the bot posts status messages.
-
-### feeds &mdash; feeds that should be posted to channels
-
 **Syntax:** *feeds=\<channel1\> \<name1\> \<url1\>[,\<channel2\> \<name2\> \<url2\>]...*
 
 *Default:* empty

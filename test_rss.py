@@ -57,12 +57,6 @@ def test_configDefine_SopelMemory():
     assert type(bot.memory['rss']) == rss.SopelMemory
 
 
-def test_configDefine_monitoring_channel():
-    bot = MockSopel('Sopel')
-    bot = rss.__configDefine(bot)
-    assert bot.memory['rss']['monitoring_channel'] == ''
-
-
 def test_configDefine_feeds():
     bot = MockSopel('Sopel')
     bot = rss.__configDefine(bot)
@@ -88,7 +82,6 @@ db_filename = '''+ bot.db.filename + '''
 channels = #channel1
 
 [rss]
-monitoring_channel = '''+'''
 feeds = #channel1 feed1 http://www.site1.com/feed
 
 '''
@@ -105,7 +98,6 @@ homedir = ''' + bot.config.homedir + '''
 db_filename = '''+ bot.db.filename + '''
 
 [rss]
-monitoring_channel = '''+'''
 feeds = #channel1 feed1 http://www.site1.com/feed
 
 '''
