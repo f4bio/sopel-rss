@@ -10,6 +10,7 @@ import pytest
 import tempfile
 import types
 
+
 @pytest.fixture(scope="function")
 def bot(request):
     # init bot mock
