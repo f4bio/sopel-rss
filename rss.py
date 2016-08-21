@@ -447,7 +447,6 @@ def __rsslist(bot, arg):
 
     # list feeds in channel
     for feedname, feed in bot.memory['rss']['feeds'].items():
-        print(feedname)
         if arg and arg != feed['channel']:
             continue
         bot.say('{} {} {}'.format(feed['channel'], feed['name'], feed['url']))

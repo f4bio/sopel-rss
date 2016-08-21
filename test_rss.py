@@ -383,7 +383,7 @@ def test_rssjoin(bot):
 
 def test_rsslist_all(bot_rsslist):
     rss.__rsslist(bot_rsslist, '')
-    expected = '#channel2 feed2 http://www.site2.com/feed\n#channel1 feed1 http://www.site1.com/feed\n'
+    expected = '#channel1 feed1 http://www.site1.com/feed\n#channel2 feed2 http://www.site2.com/feed\n'
     assert expected == bot_rsslist.output
 
 
