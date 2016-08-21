@@ -12,6 +12,7 @@ import hashlib
 LOGGER = get_logger(__name__)
 MAX_HASHES_PER_FEED = 100
 UPDATE_INTERVAL = 60 # seconds
+FORMAT_DEFAULT = 'l+tl'
 
 class RSSSection(StaticSection):
     feeds = ListAttribute('feeds', default = '')
@@ -101,17 +102,11 @@ def rssupdate(bot, trigger):
 
 
 def __configDefine(bot):
-
-    # define new config section 'rss'
     bot.config.define_section('rss', RSSSection)
     bot.memory['rss'] = SopelMemory()
-
-    # define dict 'feeds'
     bot.memory['rss']['feeds'] = dict()
-
-    # define dict hashes
     bot.memory['rss']['hashes'] = dict()
-
+    bot.memory['rss']['formats'] = dict()
     return bot
 
 
@@ -129,11 +124,19 @@ def __configRead(bot):
             feedname = atoms[1]
             url = atoms[2]
 
+            try:
+                format = atoms[3]
+            except IndexError:
+                format = FORMAT_DEFAULT
+
             # create new dict for feed properties
             bot.memory['rss']['feeds'][feedname] = { 'channel': channel, 'name': feedname, 'url': url }
 
             # create new RingBuffer for hashes of feed items
             bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
+
+            # create new FeedFormater to store feed item fields and formats
+            bot.memory['rss']['formats'][feedname] = FeedFormater(format)
 
             result = __dbCheckIfTableExists(bot, feedname)
 
@@ -172,7 +175,11 @@ def __configSave(bot):
     # flatten feeds for config file
     feeds = []
     for feedname, feed in bot.memory['rss']['feeds'].items():
-        feeds.append(feed['channel'] + ' ' + feed['name'] + ' ' + feed['url'])
+        newfeed = feed['channel'] + ' ' + feed['name'] + ' ' + feed['url']
+        format = bot.memory['rss']['formats'][feedname].get()
+        if format != FORMAT_DEFAULT:
+            newfeed += ' ' + format
+        feeds.append(newfeed)
     bot.config.rss.feeds = [",".join(feeds)]
 
     # save channels to config file
@@ -277,6 +284,11 @@ def __feedAdd(bot, channel, feedname, url):
     # create new RingBuffer for hashes of feed items
     bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
     message = 'added ring buffer for feed "{}"'.format(feedname)
+    LOGGER.debug(message)
+
+    # create new RingBuffer for hashes of feed items
+    bot.memory['rss']['formats'][feedname] = FeedFormater(FORMAT_DEFAULT)
+    message = 'added feed formater for feed "{}"'.format(feedname)
     LOGGER.debug(message)
 
     # create new dict for feed properties
@@ -426,6 +438,7 @@ def __rssjoin(bot):
 
 
 def __rsslist(bot, arg):
+
     # list feed
     if arg and __feedExists(bot, arg):
         feed = bot.memory['rss']['feeds'][arg]
@@ -434,16 +447,11 @@ def __rsslist(bot, arg):
 
     # list feeds in channel
     for feedname, feed in bot.memory['rss']['feeds'].items():
+        print(feedname)
         if arg and arg != feed['channel']:
             continue
         bot.say('{} {} {}'.format(feed['channel'], feed['name'], feed['url']))
-        return NOLIMIT
 
-    if arg.startswith('#'):
-        bot.say('no feed in channel "{}" nor a feed named "{}" found'.format(arg, arg))
-        return NOLIMIT
-
-    bot.say('no feed "{}" found'.format(arg, arg))
     return NOLIMIT
 
 
@@ -472,6 +480,14 @@ class FeedReader:
             return feed
         except:
             return False
+
+
+class FeedFormater:
+    def __init__(self, format):
+        self.format = format
+
+    def get(self):
+        return self.format
 
 
 # Implementing a ring buffer
