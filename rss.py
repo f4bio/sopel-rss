@@ -78,7 +78,6 @@ def rssdel(bot, trigger):
         return NOLIMIT
 
     __feedDelete(bot, feedname)
-
     __configSave(bot)
 
     return NOLIMIT

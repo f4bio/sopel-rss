@@ -26,6 +26,8 @@ def bot(request):
     sql_create_table = 'CREATE TABLE ' + rss.__hashTablename('feed1') + ' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)'
     bot.db.execute(sql_create_table)
 
+    bot.channels = ['#channel1']
+
     # initialize variable which will store every bot.say
     bot.output = ''
 
@@ -36,6 +38,7 @@ def bot(request):
 
     # teardown method
     def fin():
+        os.remove(bot.config.filename)
         os.remove(bot.config.core.db_filename)
     request.addfinalizer(fin)
 
@@ -72,8 +75,41 @@ def test_configDefine_hashes():
     assert type(bot.memory['rss']['hashes']) == dict
 
 
+def test_configRead(bot):
+    bot.channels=['#test']
+    rss.__configSave(bot)
+    rss.__configRead(bot)
+    f = open(bot.config.filename, 'r')
+    expected = '''[core]
+owner = '''+'''
+admins = '''+'''
+homedir = ''' + bot.config.homedir + '''
+db_filename = '''+ bot.db.filename + '''
+channels = #channel1
+
+[rss]
+monitoring_channel = '''+'''
+feeds = #channel1 feed1 http://www.site1.com/feed
+
+'''
+    assert expected == f.read()
+
+
 def test_configSave(bot):
-    pass
+    rss.__configSave(bot)
+    f = open(bot.config.filename, 'r')
+    expected = '''[core]
+owner = '''+'''
+admins = '''+'''
+homedir = ''' + bot.config.homedir + '''
+db_filename = '''+ bot.db.filename + '''
+
+[rss]
+monitoring_channel = '''+'''
+feeds = #channel1 feed1 http://www.site1.com/feed
+
+'''
+    assert expected == f.read()
 
 
 def test_dbCreateTable_and_dbCheckIfTableExists(bot):
