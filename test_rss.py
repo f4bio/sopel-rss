@@ -145,6 +145,46 @@ def bot_config_save(request):
     return bot
 
 
+@pytest.fixture(scope="function")
+def bot_rssupdate(request):
+    # init bot mock
+    bot = MockSopel('Sopel')
+    bot = rss.__configDefine(bot)
+
+    # init db mock
+    bot.config.core.db_filename = tempfile.mkstemp()[1]
+    bot.db = SopelDB(bot.config)
+
+    # add some data
+    bot.memory['rss']['feeds']['feed1'] = {'channel': '#channel1', 'name': 'feed1', 'url': FEED_VALID}
+    bot.memory['rss']['hashes']['feed1'] = rss.RingBuffer(100)
+    sql_create_table = 'CREATE TABLE ' + rss.__hashTablename('feed1') + ' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)'
+    bot.db.execute(sql_create_table)
+    bot.channels = ['#channel1']
+
+    # initialize variable which will store every bot.say
+    bot.output = ''
+
+    # monkey patch bot instance: join
+    def join(self, channel):
+        if channel not in bot.channels:
+            bot.channels.append(channel)
+    bot.join = types.MethodType(join, bot)
+
+    # monkey patch bot instance: say
+    def say(self, message, channel = ''):
+        bot.output += message + "\n"
+    bot.say = types.MethodType(say, bot)
+
+    # teardown method
+    def fin():
+        os.remove(bot.config.filename)
+        os.remove(bot.config.core.db_filename)
+    request.addfinalizer(fin)
+
+    return bot
+
+
 @pytest.fixture(scope="module")
 def feedreader_feed_valid():
     return MockFeedReader(FEED_VALID)
@@ -195,7 +235,7 @@ feeds = #channel1 feed1 http://www.site1.com/feed
 '''
     f = open(bot_config_save.config.filename, 'r')
     config = f.read()
-    assert expected == config
+    assert config == expected
 
 
 def test_dbCreateTable_and_dbCheckIfTableExists(bot):
@@ -238,7 +278,7 @@ def test_dbSaveHashesToDatabase(bot, feedreader_feed_valid):
     rss.__dbSaveHashesToDatabase(bot, 'feed1')
     hashes = rss.__dbReadHashesFromDatabase(bot, 'feed1')
     expected = [(1, '463f9357db6c20a94a68f9c9ef3bb0fb'), (2, 'af2110eedcbb16781bb46d8e7ca293fe'), (3, '309be3bef1ff3e13e9dbfc010b25fd9c')]
-    assert expected == hashes
+    assert hashes == expected
 
 
 def test_feedAdd_create_db_table(bot):
@@ -308,15 +348,14 @@ def test_feedExists_fails(bot):
 def test_feedUpdate_print_messages(bot, feedreader_feed_valid):
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
     expected = bold('[feed1]') + ' Title 1 ' + bold('→') + " https://www.site1.com/article1\n" + bold('[feed1]') + ' Title 2 ' + bold('→') + " https://www.site1.com/article2\n" + bold('[feed1]') + ' Title 3 ' + bold('→') + " https://www.site1.com/article3\n"
-    output = bot.output
-    assert expected == output
+    assert bot.output == expected
 
 
 def test_feedUpdate_store_hashes(bot, feedreader_feed_valid):
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
     expected = ['463f9357db6c20a94a68f9c9ef3bb0fb', 'af2110eedcbb16781bb46d8e7ca293fe', '309be3bef1ff3e13e9dbfc010b25fd9c']
     hashes = bot.memory['rss']['hashes']['feed1'].get()
-    assert expected == hashes
+    assert hashes == expected
 
 
 def test_feedUpdate_no_update(bot, feedreader_feed_valid):
@@ -359,7 +398,6 @@ def test_rssget_all(bot):
     rss.__feedAdd(bot, '#channel', 'feedname', FEED_VALID)
     rss.__rssget(bot, 'feedname', 'all')
     expected = bold('[feedname]') + ' Title 1 ' + bold('→') + " https://www.site1.com/article1\n" + bold('[feedname]') + ' Title 2 ' + bold('→') + " https://www.site1.com/article2\n" + bold('[feedname]') + ' Title 3 ' + bold('→') + " https://www.site1.com/article3\n"
-#    print(bot.output)
     assert bot.output == expected
 
 
@@ -401,6 +439,19 @@ def test_rsslist_no_feed_found(bot):
     rss.__rsslist(bot, 'invalid')
     expected = 'no feed "invalid" found\n'
     assert bot.output == expected
+
+
+def test_rssupdate_update(bot_rssupdate):
+    rss.__rssupdate(bot_rssupdate)
+    expected = bold('[feed1]') + ' Title 1 ' + bold('→') + " https://www.site1.com/article1\n" + bold('[feed1]') + ' Title 2 ' + bold('→') + " https://www.site1.com/article2\n" + bold('[feed1]') + ' Title 3 ' + bold('→') + " https://www.site1.com/article3\n"
+    assert bot_rssupdate.output == expected
+
+
+def test_rssupdate_no_update(bot_rssupdate):
+    rss.__rssupdate(bot_rssupdate)
+    bot.output = ''
+    rss.__rssupdate(bot_rssupdate)
+    assert bot.output == ''
 
 
 def test_RingBuffer_append():

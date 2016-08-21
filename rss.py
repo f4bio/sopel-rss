@@ -504,3 +504,8 @@ class RingBuffer:
     def get(self):
         """ return a list of elements from the oldest to the newest. """
         return self.data
+
+
+if __name__ == "__main__":
+    from sopel.test_tools import run_example_tests
+    run_example_tests(__file__)

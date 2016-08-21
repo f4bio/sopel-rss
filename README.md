@@ -60,6 +60,12 @@ The following options can be set in the configuration file. Be aware that the bo
 
 This is the main data of the bot which will be read when the bot is started or when the owner or an admin issues the command *.reload rss* in a query with the bot.
 
+### Unit Tests
+
+The module is extensively tested through [py.test](http://doc.pytest.org):
+
+`python3 -m pytest -v test/test_rss.py sopel/modules/rss.py`
+
 ### TODO
 
 * The fields which will be hashed should be configurable.
