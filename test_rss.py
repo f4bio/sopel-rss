@@ -373,12 +373,34 @@ def test_rssjoin(bot):
     assert bot.channels == channels
 
 
-#def test_rsslist_all(bot):
-#    rss._rsslist(bot, arg)
+def test_rsslist_all(bot):
+    rss.__rsslist(bot, '')
+    expected = '#channel1 feed1 http://www.site1.com/feed\n'
+    assert bot.output == expected
 
 
-#def test_rssupdate(bot):
-#    rss.__rssupdate(bot)
+def test_rsslist_feed(bot):
+    rss.__rsslist(bot, 'feed1')
+    expected = '#channel1 feed1 http://www.site1.com/feed\n'
+    assert bot.output == expected
+
+
+def test_rsslist_channel(bot):
+    rss.__rsslist(bot, '#channel1')
+    expected = '#channel1 feed1 http://www.site1.com/feed\n'
+    assert bot.output == expected
+
+
+def test_rsslist_neither_feed_nor_channel_found(bot):
+    rss.__rsslist(bot, '#invalid')
+    expected = 'no feed in channel "#invalid" nor a feed named "#invalid" found\n'
+    assert bot.output == expected
+
+
+def test_rsslist_no_feed_found(bot):
+    rss.__rsslist(bot, 'invalid')
+    expected = 'no feed "invalid" found\n'
+    assert bot.output == expected
 
 
 def test_RingBuffer_append():

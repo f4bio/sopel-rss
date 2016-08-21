@@ -439,7 +439,11 @@ def __rsslist(bot, arg):
         bot.say('{} {} {}'.format(feed['channel'], feed['name'], feed['url']))
         return NOLIMIT
 
-    bot.say('neither feed "{}" nor feed in channel "{}" found'.format(arg, arg))
+    if arg.startswith('#'):
+        bot.say('no feed in channel "{}" nor a feed named "{}" found'.format(arg, arg))
+        return NOLIMIT
+
+    bot.say('no feed "{}" found'.format(arg, arg))
     return NOLIMIT
 
 
