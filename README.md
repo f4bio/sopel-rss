@@ -54,8 +54,6 @@ If *all* is present the bot will post the whole feed to the channel to which the
 
 The following options can be set in the configuration file. Be aware that the bot mustn't be running when editing the configuration file. Otherwise, your edits may be overwritten!
 
-### monitoring_channel &mdash; status message channel
-
 **Syntax:** *feeds=\<channel1\> \<name1\> \<url1\>[,\<channel2\> \<name2\> \<url2\>]...*
 
 *Default:* empty
@@ -64,6 +62,5 @@ This is the main data of the bot which will be read when the bot is started or w
 
 ### TODO
 
-* Tests are missing
 * The fields which will be hashed should be configurable.
 * The output format and fields should be configurable.
