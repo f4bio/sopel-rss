@@ -11,7 +11,7 @@ import hashlib
 
 LOGGER = get_logger(__name__)
 MAX_HASHES_PER_FEED = 100
-
+UPDATE_INTERVAL = 60 # seconds
 
 class RSSSection(StaticSection):
     feeds = ListAttribute('feeds', default = '')
@@ -34,132 +34,70 @@ def shutdown(bot):
 @require_admin
 @commands('rssadd')
 def rssadd(bot, trigger):
-    # check parameters
     if trigger.group(3) is None or trigger.group(4) is None or trigger.group(5) is None or not trigger.group(6) is None:
         bot.say('syntax: {}{} <channel> <name> <url>'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
-
     channel = trigger.group(3)
     feedname = trigger.group(4)
     url = trigger.group(5)
-
-    result = __feedCheck(bot, channel, feedname)
-    if not result == 'valid':
-        bot.say(result)
-        return NOLIMIT
-
-    feedreader = FeedReader(url)
-    feed = feedreader.read()
-    if not feed:
-        message = 'unable to read url "{}"'.format(url)
-        LOGGER.error(message)
-        return NOLIMIT
-
-    __feedAdd(bot, channel, feedname, url)
-    bot.join(channel)
-    __configSave(bot)
+    __rssadd(bot, channel, feedname, url)
     return NOLIMIT
 
 
 @require_admin
 @commands('rssdel')
 def rssdel(bot, trigger):
-
-    # check parameters
     if trigger.group(3) is None or not trigger.group(4) is None:
         bot.say('syntax: {}{} <name>'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
-
     feedname = trigger.group(3)
-
-    if not feedname in bot.memory['rss']['feeds']:
-        bot.say('feed "{}" doesn\'t exist!'.format(feedname))
-        return NOLIMIT
-
-    __feedDelete(bot, feedname)
-    __configSave(bot)
-
+    __rssdel(bot, feedname)
     return NOLIMIT
 
 
 @require_admin
 @commands('rssget')
 def rssget(bot, trigger):
-
-    # check parameters
     if trigger.group(3) is None or (trigger.group(4) and trigger.group(4) != 'all') or trigger.group(5):
         bot.say('syntax: {}{} <name> [all]'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
-
     feedname = trigger.group(3)
-
-    # if chatty is True then the bot will post feed items to a channel
-    chatty = False
-
-    if feedname not in bot.memory['rss']['feeds']:
-        bot.say('feed {} doesn\'t exist'.format(feedname))
-        return NOLIMIT
-
-    if (trigger.group(4) and trigger.group(4) == 'all'):
-        chatty = True
-
-    url = bot.memory['rss']['feeds'][feedname]['url']
-    feedreader = FeedReader(url)
-    __feedUpdate(bot, feedreader, feedname, chatty)
-    __configSave(bot)
+    scope = ''
+    if trigger.group(4):
+        scope = trigger.group(4)
+    __rssget(bot, feedname, scope)
     return NOLIMIT
 
 
 @require_admin
 @commands('rssjoin')
 def rssjoin(bot, trigger):
-
-    # check parameters
-    if not trigger.group(2) is None:
+    if trigger.group(2) is not None:
         bot.say('syntax: {}{}'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
-
-    for feedname, feed in bot.memory['rss']['feeds'].items():
-        bot.join(feed['channel'])
-
-
-    if bot.config.core.logging_channel:
-        bot.join(bot.config.core.logging_channel)
-
+    __rssjoin(bot)
     return NOLIMIT
 
 
 @require_admin
 @commands('rsslist')
 def rsslist(bot, trigger):
-
-    # check parameters
-    if not trigger.group(4) is None:
-        bot.say('syntax: {}{} [<channel>]'.format(bot.config.core.prefix, trigger.group(1)))
+    if trigger.group(4) is not None:
+        bot.say('syntax: {}{} [<feed>|<channel>]'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
-
-    channel = trigger.group(3)
-
-    # check that channel starts with #
-    if channel and not channel.startswith('#'):
-        bot.say('channel "{}" must start with "#"'.format(channel))
-        return NOLIMIT
-
-    for feedname, feed in bot.memory['rss']['feeds'].items():
-        if channel and channel != feed['channel']:
-            continue
-        bot.say('{} {} {}'.format(feed['channel'], feed['name'], feed['url']))
-
+    arg = trigger.group(3)
+    __rsslist(bot, arg)
     return NOLIMIT
 
 
-@interval(60)
-def rssupdate(bot):
-    for feedname in bot.memory['rss']['feeds']:
-        url = bot.memory['rss']['feeds'][feedname]['url']
-        feedreader = FeedReader(url)
-        __feedUpdate(bot, feedreader, feedname, False)
-        __configSave(bot)
+@require_admin
+@commands('rssupdate')
+def rssupdate(bot, trigger):
+    if not trigger.group(2) is None:
+        bot.say('syntax: {}{}'.format(bot.config.core.prefix, trigger.group(1)))
+        return NOLIMIT
+    __rssupdate(bot)
+    return NOLIMIT
 
 
 def __configDefine(bot):
@@ -334,7 +272,6 @@ def __dbSaveHashesToDatabase(bot, feedname):
 
 
 def __feedAdd(bot, channel, feedname, url):
-    tablename = __hashTablename(feedname)
     __dbCreateTable(bot, feedname)
 
     # create new RingBuffer for hashes of feed items
@@ -345,39 +282,61 @@ def __feedAdd(bot, channel, feedname, url):
     # create new dict for feed properties
     bot.memory['rss']['feeds'][feedname] = { 'channel': channel, 'name': feedname, 'url': url }
 
-    message = 'added rss feed "{}" to channel "{}" with url "{}"'.format(feedname, channel, url)
-    LOGGER.info(message)
-    bot.say(message)
+    message_info = 'added rss feed "{}" to channel "{}" with url "{}"'.format(feedname, channel, url)
+    LOGGER.info(message_info)
+
+    return message_info
 
 
-def __feedCheck(bot, channel, feedname):
+def __feedCheck(bot, feedreader, channel, feedname):
+
+    result = []
+
+    # read feed
+    feed = feedreader.read()
+    if not feed:
+        message = 'unable to read feed'
+        result.append(message)
 
     # check that feed name is unique
-    if feedname in bot.memory['rss']['feeds']:
-        return 'feed name "{}" is already in use, please choose a different name'.format(feedname)
+    if __feedExists(bot, feedname):
+        message = 'feed name "{}" is already in use, please choose a different name'.format(feedname)
+        result.append(message)
 
     # check that channel starts with #
     if not channel.startswith('#'):
-        return 'channel "{}" must start with a "#"'.format(channel)
+        message = 'channel "{}" must start with a "#"'.format(channel)
+        result.append(message)
 
-    return 'valid'
+    # check that feed items have either title or description
+    item = feed['entries'][0]
+    if not hasattr(item, 'title') and not hasattr(item, 'description'):
+        message = 'feed items have neither title nor description'
+        result.append(message)
+
+    return result
 
 
 def __feedDelete(bot, feedname):
-    tablename = __hashTablename(feedname)
     channel = bot.memory['rss']['feeds'][feedname]['channel']
     url = bot.memory['rss']['feeds'][feedname]['url']
-    del(bot.memory['rss']['feeds'][feedname])
-    message = 'deleted rss feed "{}" in channel "{}" with url "{}"'.format(feedname, channel, url)
-    LOGGER.info(message)
-    bot.say(message)
 
-    # create new RingBuffer for hashes of feed items
+    del(bot.memory['rss']['feeds'][feedname])
+    message_info = 'deleted rss feed "{}" in channel "{}" with url "{}"'.format(feedname, channel, url)
+    LOGGER.info(message_info)
+
     del(bot.memory['rss']['hashes'][feedname])
     message = 'deleted ring buffer for feed "{}"'.format(feedname)
     LOGGER.debug(message)
 
     __dbDropTable(bot, feedname)
+    return message_info
+
+
+def __feedExists(bot, feedname):
+    if feedname in bot.memory['rss']['feeds']:
+        return True
+    return False
 
 
 def __feedUpdate(bot, feedreader, feedname, chatty):
@@ -398,8 +357,10 @@ def __feedUpdate(bot, feedreader, feedname, chatty):
         if chatty or new_item:
             if new_item:
                 bot.memory['rss']['hashes'][feedname].append(hash)
+                __dbSaveHashesToDatabase(bot, feedname)
             message = bold('[' + feedname + ']') + ' '
             message += item['title'] + ' ' + bold('→') + ' ' + item['link']
+            LOGGER.debug(message)
             bot.say(message, channel)
 
 
@@ -410,6 +371,90 @@ def __hashString(string):
 def __hashTablename(tablename):
     # we need to hash the name of the table as sqlite3 does not permit to substitute table names
     return 'rss_' + __hashString(tablename)
+
+
+def __rssadd(bot, channel, feedname, url):
+    feedreader = FeedReader(url)
+    checkresults = __feedCheck(bot, feedreader, channel, feedname)
+    if checkresults:
+        for message in checkresults:
+            LOGGER.debug(message)
+            bot.say(message)
+        return NOLIMIT
+    message = __feedAdd(bot, channel, feedname, url)
+    bot.say(message)
+    bot.join(channel)
+    __configSave(bot)
+    return NOLIMIT
+
+
+def __rssdel(bot, feedname):
+    if not __feedExists(bot, feedname):
+        bot.say('feed "{}" doesn\'t exist!'.format(feedname))
+        return NOLIMIT
+    message = __feedDelete(bot, feedname)
+    bot.say(message)
+    __configSave(bot)
+
+
+def __rssget(bot, feedname, scope = ''):
+    # if chatty is True then the bot will post feed items to a channel
+    chatty = False
+
+    if scope == 'all':
+        chatty = True
+
+    if not __feedExists(bot, feedname):
+        message = 'feed {} doesn\'t exist'.format(feedname)
+        LOGGER.debug(message)
+        bot.say(message)
+        return NOLIMIT
+
+    url = bot.memory['rss']['feeds'][feedname]['url']
+    feedreader = FeedReader(url)
+    __feedUpdate(bot, feedreader, feedname, chatty)
+    __configSave(bot)
+    return NOLIMIT
+
+
+def __rssjoin(bot):
+    for feedname, feed in bot.memory['rss']['feeds'].items():
+        bot.join(feed['channel'])
+    if bot.config.core.logging_channel:
+        bot.join(bot.config.core.logging_channel)
+    return NOLIMIT
+
+
+def __rsslist(bot, arg):
+    # list feed
+    if arg and __feedExists(bot, arg):
+        feed = bot.memory['rss']['feeds'][arg]
+        bot.say('{} {} {}'.format(feed['channel'], feed['name'], feed['url']))
+        return NOLIMIT
+
+    # list feeds in channel
+    for feedname, feed in bot.memory['rss']['feeds'].items():
+        if arg and arg != feed['channel']:
+            continue
+        bot.say('{} {} {}'.format(feed['channel'], feed['name'], feed['url']))
+        return NOLIMIT
+
+    bot.say('neither feed "{}" nor feed in channel "{}" found'.format(arg, arg))
+    return NOLIMIT
+
+
+@interval(UPDATE_INTERVAL)
+def __rssupdate(bot):
+    for feedname in bot.memory['rss']['feeds']:
+
+        # the conditional check is necessary to avoid
+        # "RuntimeError: dictionary changed size during iteration"
+        # which occurs if a feed has been deleted in the meantime
+        if __feedExists(bot, feedname):
+            url = bot.memory['rss']['feeds'][feedname]['url']
+            feedreader = FeedReader(url)
+            __feedUpdate(bot, feedreader, feedname, False)
+    return NOLIMIT
 
 
 # Implementing an rss feed reader for dependency injection
