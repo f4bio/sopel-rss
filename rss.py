@@ -30,6 +30,7 @@ def setup(bot):
 
 def shutdown(bot):
     __configSave(bot)
+    __dbSaveAllHashesToDatabase(bot)
 
 
 @require_admin
@@ -164,10 +165,6 @@ def __configSave(bot):
     if not bot.memory['rss']['feeds']:
         return NOLIMIT
 
-    # save hashes from memory to database
-    for feedname in bot.memory['rss']['feeds']:
-        __dbSaveHashesToDatabase(bot, feedname)
-
     # we want no more than MAX_HASHES in our database
     for feedname in bot.memory['rss']['feeds']:
         __dbRemoveOldHashesFromDatabase(bot, feedname)
@@ -260,6 +257,22 @@ def __dbRemoveOldHashesFromDatabase(bot, feedname):
         message = 'removed {} rows in table "{}" of feed "{}"'.format(str(delete_rows), tablename, feedname)
         LOGGER.debug(message)
 
+
+def __dbSaveHashToDatabase(bot, feedname, hash):
+    tablename = __hashTablename(feedname)
+
+    # INSERT OR IGNORE is the short form of INSERT ON CONFLICT IGNORE
+    sql_save_hashes = "INSERT OR IGNORE INTO '{}' VALUES (NULL,?)".format(tablename)
+
+    try:
+        bot.db.execute(sql_save_hashes, (hash,))
+        message = 'saved hash "{}" of feed "{}" to sqlite table "{}"'.format(hash, feedname, tablename)
+        LOGGER.debug(message)
+    except:
+        message = 'could not save hash "{}" of feed "{}" to sqlite table "{}"'.format(hash, feedname, tablename)
+        LOGGER.error(message)
+
+
 def __dbSaveHashesToDatabase(bot, feedname):
     tablename = __hashTablename(feedname)
     hashes = bot.memory['rss']['hashes'][feedname].get()
@@ -270,12 +283,17 @@ def __dbSaveHashesToDatabase(bot, feedname):
     for hash in hashes:
         try:
             bot.db.execute(sql_save_hashes, (hash,))
-            message = 'saved hashes of feed "{}" to sqlite table "{}"'.format(feedname, tablename)
-            LOGGER.debug(message)
         except:
-            # if we have concurrent feed update threads then a database lock may occur
-            # this is no problem as the ring buffer will be saved during the next feed update
-            pass
+            message = 'could not save hash "{}" of feed "{}" to sqlite table "{}"'.format(hash, feedname, tablename)
+            LOGGER.error(message)
+
+    message = 'saved hashes feed "{}" to sqlite table "{}"'.format(feedname, tablename)
+    LOGGER.debug(message)
+
+
+def __dbSaveAllHashesToDatabase(bot):
+    for feedname in bot.memory['rss']['feeds']:
+        __dbSaveHashesToDatabase(bot, feedname)
 
 
 def __feedAdd(bot, channel, feedname, url):
@@ -369,7 +387,7 @@ def __feedUpdate(bot, feedreader, feedname, chatty):
         if chatty or new_item:
             if new_item:
                 bot.memory['rss']['hashes'][feedname].append(hash)
-                __dbSaveHashesToDatabase(bot, feedname)
+                __dbSaveHashToDatabase(bot, feedname, hash)
             message = bold('[' + feedname + ']') + ' '
             message += item['title'] + ' ' + bold('→') + ' ' + item['link']
             LOGGER.debug(message)
@@ -407,6 +425,7 @@ def __rssdel(bot, feedname):
     message = __feedDelete(bot, feedname)
     bot.say(message)
     __configSave(bot)
+    return NOLIMIT
 
 
 def __rssget(bot, feedname, scope = ''):
@@ -425,7 +444,6 @@ def __rssget(bot, feedname, scope = ''):
     url = bot.memory['rss']['feeds'][feedname]['url']
     feedreader = FeedReader(url)
     __feedUpdate(bot, feedreader, feedname, chatty)
-    __configSave(bot)
     return NOLIMIT
 
 

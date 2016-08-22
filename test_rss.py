@@ -152,6 +152,16 @@ def feedreader_feed_item_neither_title_nor_description():
     return MockFeedReader(FEED_ITEM_NEITHER_TITLE_NOR_DESCRIPTION)
 
 
+# Implementing a mock rss feed reader
+class MockFeedReader:
+    def __init__(self, url):
+        self.url = url
+
+    def read(self):
+        feed = feedparser.parse(self.url)
+        return feed
+
+
 def test_configDefine_SopelMemory():
     bot = MockSopel('Sopel')
     bot = rss.__configDefine(bot)
@@ -243,12 +253,23 @@ def test_dbRemoveOldHashesFromDatabase(bot):
     assert rss.MAX_HASHES_PER_FEED == rows_feed
 
 
-def test_dbSaveHashesToDatabase(bot, feedreader_feed_valid):
-    rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
-    rss.__dbSaveHashesToDatabase(bot, 'feed1')
+def test_dbSaveHashToDatabase(bot, feedreader_feed_valid):
+    rss.__dbSaveHashToDatabase(bot, 'feed1', '463f9357db6c20a94a68f9c9ef3bb0fb')
     hashes = rss.__dbReadHashesFromDatabase(bot, 'feed1')
-    expected = [(1, '463f9357db6c20a94a68f9c9ef3bb0fb'), (2, 'af2110eedcbb16781bb46d8e7ca293fe'), (3, '309be3bef1ff3e13e9dbfc010b25fd9c')]
+    expected = [(1, '463f9357db6c20a94a68f9c9ef3bb0fb')]
     assert expected == hashes
+
+
+def test_dbSaveAllHashesToDatabase(bot, feedreader_feed_valid):
+    rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
+    rss.__feedAdd(bot, 'channel2', 'feed2', 'https://www.site2.com/feed')
+    rss.__feedUpdate(bot, feedreader_feed_valid, 'feed2', True)
+    rss.__dbSaveAllHashesToDatabase(bot)
+    hashes1 = rss.__dbReadHashesFromDatabase(bot, 'feed1')
+    hashes2 = rss.__dbReadHashesFromDatabase(bot, 'feed1')
+    expected = [(1, '463f9357db6c20a94a68f9c9ef3bb0fb'), (2, 'af2110eedcbb16781bb46d8e7ca293fe'), (3, '309be3bef1ff3e13e9dbfc010b25fd9c')]
+    assert expected == hashes1
+    assert expected == hashes2
 
 
 def test_feedAdd_create_db_table(bot):
@@ -383,8 +404,10 @@ def test_rssjoin(bot):
 
 def test_rsslist_all(bot_rsslist):
     rss.__rsslist(bot_rsslist, '')
-    expected = '#channel1 feed1 http://www.site1.com/feed\n#channel2 feed2 http://www.site2.com/feed\n'
-    assert expected == bot_rsslist.output
+    expected1 = '#channel1 feed1 http://www.site1.com/feed'
+    expected2 = '#channel2 feed2 http://www.site2.com/feed'
+    assert expected1 in bot_rsslist.output
+    assert expected2 in bot_rsslist.output
 
 
 def test_rsslist_feed(bot):
@@ -437,13 +460,3 @@ def test_RingBuffer_overflow():
     assert ['hash1', 'hash2', 'hash3'] == rb.get()
     rb.append('hash4')
     assert ['hash2', 'hash3', 'hash4'] == rb.get()
-
-
-# Implementing a mock rss feed reader
-class MockFeedReader:
-    def __init__(self, url):
-        self.url = url
-
-    def read(self):
-        feed = feedparser.parse(self.url)
-        return feed
