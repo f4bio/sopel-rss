@@ -128,7 +128,7 @@ def __configRead(bot):
 
             __feedAdd(bot, channel, feedname, url, format)
 
-            __hashesAdd(bot, feedname)
+            __hashesRead(bot, feedname)
 
     message = 'read config from disk'
     LOGGER.debug(message)
@@ -147,7 +147,7 @@ def __configSave(bot):
     feeds = []
     for feedname, feed in bot.memory['rss']['feeds'].items():
         newfeed = feed['channel'] + ' ' + feed['name'] + ' ' + feed['url']
-        format = bot.memory['rss']['formats'][feedname].get()
+        format = bot.memory['rss']['formats'][feedname].get_format()
         if format != FORMAT_DEFAULT:
             newfeed += ' ' + format
         feeds.append(newfeed)
@@ -264,11 +264,6 @@ def __dbSaveHashesToDatabase(bot, feedname):
     LOGGER.debug(message)
 
 
-def __dbSaveAllHashesToDatabase(bot):
-    for feedname in bot.memory['rss']['feeds']:
-        __dbSaveHashesToDatabase(bot, feedname)
-
-
 def __digestString(string):
     return hashlib.md5(string.encode('utf-8')).hexdigest()
 
@@ -289,8 +284,9 @@ def __feedAdd(bot, channel, feedname, url, format):
     message = 'added ring buffer for feed "{}"'.format(feedname)
     LOGGER.debug(message)
 
-    # create new RingBuffer for hashes of feed items
-    bot.memory['rss']['formats'][feedname] = FeedFormater(format, url)
+    # create new FeedFormatter to handle feed hashing and output
+    feedreader = FeedReader(url)
+    bot.memory['rss']['formats'][feedname] = FeedFormater(format, feedreader)
     message = 'added feed formater for feed "{}"'.format(feedname)
     LOGGER.debug(message)
 
@@ -378,7 +374,7 @@ def __feedUpdate(bot, feedreader, feedname, chatty):
             bot.say(message, channel)
 
 
-def __hashesAdd(bot, feedname):
+def __hashesRead(bot, feedname):
 
     # read hashes from database to memory
     hashes = __dbReadHashesFromDatabase(bot, feedname)
@@ -466,29 +462,6 @@ def __rssUpdate(bot):
             __feedUpdate(bot, feedreader, feedname, False)
 
 
-# Implementing an rss feed reader for dependency injection
-class FeedReader:
-    def __init__(self, url):
-        self.url = url
-
-    def read(self):
-        try:
-            feed = feedparser.parse(self.url)
-            return feed
-        except:
-            return False
-
-
-class FeedFormater:
-    def __init__(self, format, url):
-        self.format = format
-        self.url = url
-
-    def get(self):
-        return self.format
-
-
-
 # Implementing a ring buffer
 # https://www.safaribooksonline.com/library/view/python-cookbook/0596001673/ch05s19.html
 class RingBuffer:
@@ -519,3 +492,65 @@ class RingBuffer:
     def get(self):
         """ return a list of elements from the oldest to the newest. """
         return self.data
+
+
+# Implementing an rss feed reader for dependency injection
+class FeedReader:
+    def __init__(self, url):
+        self.url = url
+
+    def read(self):
+        try:
+            feed = feedparser.parse(self.url)
+            return feed
+        except:
+            return False
+
+
+# Implementing an rss format handler
+#
+# Syntax of format:
+#
+# <hashed_fields>+<output_fields>
+#
+# fields:
+# d = description
+# l = link
+# t = title
+#
+class FeedFormater:
+    def __init__(self, format, feedreader):
+        self.format = format
+        self.fields = self.__formatGetFields(feedreader)
+
+    def get_format(self):
+        return self.format
+
+    def get_fields(self):
+        return self.fields
+
+    def __formatGetFields(self, feedreader):
+        feed = feedreader.read()
+        item = feed.entries[0]
+        fields = ''
+
+        if hasattr(item, 'author'):
+            fields += 'a'
+        if hasattr(item, 'description'):
+            fields += 'd'
+        if hasattr(item, 'guid'):
+            fields += 'g'
+        if hasattr(item, 'link'):
+            fields += 'l'
+        if hasattr(item, 'published'):
+            fields += 'p'
+        if hasattr(item, 'summary'):
+            fields += 's'
+        if hasattr(item, 'title'):
+            fields += 't'
+
+        return fields
+
+
+
+
