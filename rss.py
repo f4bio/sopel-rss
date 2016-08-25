@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 from sopel.formatting import bold
 from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
 from sopel.logger import get_logger
-from sopel.module import commands, interval, NOLIMIT, require_admin
+from sopel.module import commands, interval, require_admin
 from sopel.tools import SopelMemory
 import feedparser
 import hashlib
@@ -37,7 +37,7 @@ def shutdown(bot):
 def rssadd(bot, trigger):
     if trigger.group(3) is None or trigger.group(4) is None or trigger.group(5) is None or not trigger.group(7) is None:
         bot.say('syntax: {}{} <channel> <name> <url> [<format>]'.format(bot.config.core.prefix, trigger.group(1)))
-        return NOLIMIT
+        return
     channel = trigger.group(3)
     feedname = trigger.group(4)
     url = trigger.group(5)
@@ -45,7 +45,6 @@ def rssadd(bot, trigger):
     if trigger(6):
         format = trigger(6)
     __rssAdd(bot, channel, feedname, url, format)
-    return NOLIMIT
 
 
 @require_admin
@@ -53,10 +52,9 @@ def rssadd(bot, trigger):
 def rssdel(bot, trigger):
     if trigger.group(3) is None or not trigger.group(4) is None:
         bot.say('syntax: {}{} <name>'.format(bot.config.core.prefix, trigger.group(1)))
-        return NOLIMIT
+        return
     feedname = trigger.group(3)
     __rssDel(bot, feedname)
-    return NOLIMIT
 
 
 @require_admin
@@ -64,13 +62,12 @@ def rssdel(bot, trigger):
 def rssget(bot, trigger):
     if trigger.group(3) is None or (trigger.group(4) and trigger.group(4) != 'all') or trigger.group(5):
         bot.say('syntax: {}{} <name> [all]'.format(bot.config.core.prefix, trigger.group(1)))
-        return NOLIMIT
+        return
     feedname = trigger.group(3)
     scope = ''
     if trigger.group(4):
         scope = trigger.group(4)
     __rssGet(bot, feedname, scope)
-    return NOLIMIT
 
 
 @require_admin
@@ -78,9 +75,8 @@ def rssget(bot, trigger):
 def rssjoin(bot, trigger):
     if trigger.group(2) is not None:
         bot.say('syntax: {}{}'.format(bot.config.core.prefix, trigger.group(1)))
-        return NOLIMIT
+        return
     __rssJoin(bot)
-    return NOLIMIT
 
 
 @require_admin
@@ -88,10 +84,9 @@ def rssjoin(bot, trigger):
 def rsslist(bot, trigger):
     if trigger.group(4) is not None:
         bot.say('syntax: {}{} [<feed>|<channel>]'.format(bot.config.core.prefix, trigger.group(1)))
-        return NOLIMIT
+        return
     arg = trigger.group(3)
     __rssList(bot, arg)
-    return NOLIMIT
 
 
 @require_admin
@@ -99,9 +94,8 @@ def rsslist(bot, trigger):
 def rssupdate(bot, trigger):
     if not trigger.group(2) is None:
         bot.say('syntax: {}{}'.format(bot.config.core.prefix, trigger.group(1)))
-        return NOLIMIT
+        return
     __rssUpdate(bot)
-    return NOLIMIT
 
 
 def __configDefine(bot):
@@ -143,7 +137,7 @@ def __configRead(bot):
 # save config from memory to disk
 def __configSave(bot):
     if not bot.memory['rss']['feeds']:
-        return NOLIMIT
+        return
 
     # we want no more than MAX_HASHES in our database
     for feedname in bot.memory['rss']['feeds']:
@@ -366,7 +360,7 @@ def __feedUpdate(bot, feedreader, feedname, chatty):
         url = bot.memory['rss']['feeds'][feedname]['url']
         message = 'unable to read url "{}" of feed "{}"'.format(url, feedname)
         LOGGER.error(message)
-        return NOLIMIT
+        return
 
     channel = bot.memory['rss']['feeds'][feedname]['channel']
 
@@ -403,22 +397,20 @@ def __rssAdd(bot, channel, feedname, url, format):
         for message in checkresults:
             LOGGER.debug(message)
             bot.say(message)
-        return NOLIMIT
+        return
     message = __feedAdd(bot, channel, feedname, url, format)
     bot.say(message)
     bot.join(channel)
     __configSave(bot)
-    return NOLIMIT
 
 
 def __rssDel(bot, feedname):
     if not __feedExists(bot, feedname):
         bot.say('feed "{}" doesn\'t exist!'.format(feedname))
-        return NOLIMIT
+        return
     message = __feedDelete(bot, feedname)
     bot.say(message)
     __configSave(bot)
-    return NOLIMIT
 
 
 def __rssGet(bot, feedname, scope =''):
@@ -432,12 +424,11 @@ def __rssGet(bot, feedname, scope =''):
         message = 'feed {} doesn\'t exist'.format(feedname)
         LOGGER.debug(message)
         bot.say(message)
-        return NOLIMIT
+        return
 
     url = bot.memory['rss']['feeds'][feedname]['url']
     feedreader = FeedReader(url)
     __feedUpdate(bot, feedreader, feedname, chatty)
-    return NOLIMIT
 
 
 def __rssJoin(bot):
@@ -445,7 +436,6 @@ def __rssJoin(bot):
         bot.join(feed['channel'])
     if bot.config.core.logging_channel:
         bot.join(bot.config.core.logging_channel)
-    return NOLIMIT
 
 
 def __rssList(bot, arg):
@@ -454,15 +444,13 @@ def __rssList(bot, arg):
     if arg and __feedExists(bot, arg):
         feed = bot.memory['rss']['feeds'][arg]
         bot.say('{} {} {}'.format(feed['channel'], feed['name'], feed['url']))
-        return NOLIMIT
+        return
 
     # list feeds in channel
     for feedname, feed in bot.memory['rss']['feeds'].items():
         if arg and arg != feed['channel']:
             continue
         bot.say('{} {} {}'.format(feed['channel'], feed['name'], feed['url']))
-
-    return NOLIMIT
 
 
 @interval(UPDATE_INTERVAL)
@@ -476,7 +464,6 @@ def __rssUpdate(bot):
             url = bot.memory['rss']['feeds'][feedname]['url']
             feedreader = FeedReader(url)
             __feedUpdate(bot, feedreader, feedname, False)
-    return NOLIMIT
 
 
 # Implementing an rss feed reader for dependency injection
