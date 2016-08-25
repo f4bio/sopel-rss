@@ -5,6 +5,7 @@ from sopel.config.types import StaticSection, ListAttribute, ValidatedAttribute
 from sopel.logger import get_logger
 from sopel.module import commands, interval, require_admin
 from sopel.tools import SopelMemory
+import collections
 import feedparser
 import hashlib
 
@@ -12,7 +13,6 @@ import hashlib
 LOGGER = get_logger(__name__)
 MAX_HASHES_PER_FEED = 100
 UPDATE_INTERVAL = 60 # seconds
-FORMAT_DEFAULT = 'l+tl'
 
 class RSSSection(StaticSection):
     feeds = ListAttribute('feeds', default = '')
@@ -107,10 +107,10 @@ def __configDefine(bot):
     return bot
 
 
-# read config from disk to memory
+# get_feed config from disk to memory
 def __configRead(bot):
 
-    # read 'feeds' from config file
+    # get_feed 'feeds' from config file
     if bot.config.rss.feeds and bot.config.rss.feeds[0]:
         for feed in bot.config.rss.feeds:
 
@@ -130,7 +130,7 @@ def __configRead(bot):
 
             __hashesRead(bot, feedname)
 
-    message = 'read config from disk'
+    message = 'get_feed config from disk'
     LOGGER.debug(message)
 
 
@@ -148,7 +148,8 @@ def __configSave(bot):
     for feedname, feed in bot.memory['rss']['feeds'].items():
         newfeed = feed['channel'] + ' ' + feed['name'] + ' ' + feed['url']
         format = bot.memory['rss']['formats'][feedname].get_format()
-        if format != FORMAT_DEFAULT:
+        format_default = bot.memory['rss']['formats'][feedname].get_default()
+        if format != format_default:
             newfeed += ' ' + format
         feeds.append(newfeed)
     bot.config.rss.feeds = [",".join(feeds)]
@@ -202,7 +203,7 @@ def __dbGetNumberOfRows(bot, feedname):
 def __dbReadHashesFromDatabase(bot, feedname):
     tablename = __digestTablename(feedname)
     sql_hashes = "SELECT * FROM '{}'".format(tablename)
-    message = 'read hashes of feed "{}" from sqlite table "{}"'.format(feedname, tablename)
+    message = 'get_feed hashes of feed "{}" from sqlite table "{}"'.format(feedname, tablename)
     LOGGER.debug(message)
     return bot.db.execute(sql_hashes).fetchall()
 
@@ -273,7 +274,7 @@ def __digestTablename(tablename):
     return 'rss_' + __digestString(tablename)
 
 
-def __feedAdd(bot, channel, feedname, url, format):
+def __feedAdd(bot, channel, feedname, url, format=''):
     # create hash table for this feed in sqlite3 database provided by the sopel framework
     result = __dbCheckIfTableExists(bot, feedname)
     if not result:
@@ -286,7 +287,7 @@ def __feedAdd(bot, channel, feedname, url, format):
 
     # create new FeedFormatter to handle feed hashing and output
     feedreader = FeedReader(url)
-    bot.memory['rss']['formats'][feedname] = FeedFormater(format, feedreader)
+    bot.memory['rss']['formats'][feedname] = FeedFormater(feedreader, format)
     message = 'added feed formater for feed "{}"'.format(feedname)
     LOGGER.debug(message)
 
@@ -302,15 +303,15 @@ def __feedAdd(bot, channel, feedname, url, format):
 def __feedCheck(bot, feedreader, channel, feedname):
     result = []
 
-    # read feed
-    feed = feedreader.read()
+    # get_feed feed
+    feed = feedreader.get_feed()
     if not feed:
-        message = 'unable to read feed'
+        message = 'unable to get_feed feed'
         result.append(message)
 
     # check that feed name is unique
     if __feedExists(bot, feedname):
-        message = 'feed name "{}" is already in use, please choose a different name'.format(feedname)
+        message = 'feed name "{}" is alget_feedy in use, please choose a different name'.format(feedname)
         result.append(message)
 
     # check that channel starts with #
@@ -350,11 +351,11 @@ def __feedExists(bot, feedname):
 
 
 def __feedUpdate(bot, feedreader, feedname, chatty):
-    feed = feedreader.read()
+    feed = feedreader.get_feed()
 
     if not feed:
         url = bot.memory['rss']['feeds'][feedname]['url']
-        message = 'unable to read url "{}" of feed "{}"'.format(url, feedname)
+        message = 'unable to get_feed url "{}" of feed "{}"'.format(url, feedname)
         LOGGER.error(message)
         return
 
@@ -376,7 +377,7 @@ def __feedUpdate(bot, feedreader, feedname, chatty):
 
 def __hashesRead(bot, feedname):
 
-    # read hashes from database to memory
+    # get_feed hashes from database to memory
     hashes = __dbReadHashesFromDatabase(bot, feedname)
 
     # each hash in hashes consists of
@@ -386,7 +387,7 @@ def __hashesRead(bot, feedname):
         bot.memory['rss']['hashes'][feedname].append(hash[1])
 
 
-def __rssAdd(bot, channel, feedname, url, format):
+def __rssAdd(bot, channel, feedname, url, format=''):
     feedreader = FeedReader(url)
     checkresults = __feedCheck(bot, feedreader, channel, feedname)
     if checkresults:
@@ -462,6 +463,133 @@ def __rssUpdate(bot):
             __feedUpdate(bot, feedreader, feedname, False)
 
 
+# Implementing an rss format handler
+#
+# Syntax of format:
+#
+# <hashed_fields>+<output_fields>
+#
+# fields:
+# d = description
+# l = link
+# t = title
+#
+class FeedFormater:
+
+    LOGGER = get_logger(__name__)
+
+    def __init__(self, feedreader, format=''):
+        self.separator = '+'
+        self.FORMAT_DEFAULT = 'l+tl'
+        self.FORMAT_MINIMAL = 't+t'
+        self.fields = self.__formatGetFields(feedreader)
+
+        if not format:
+            format = self.get_default()
+
+        self.format = format
+
+        format_splitted = format.split(self.separator)
+        self.hashed = format_splitted[0]
+        try:
+            self.output = format_splitted[1]
+        except IndexError:
+            self.output = ''
+        try:
+            self.remainder = format_splitted[2]
+        except IndexError:
+            self.remainder = ''
+
+        if not self.format_valid():
+            self.format = self.get_minimal()
+
+    def get_format(self):
+        return self.format
+
+    def get_fields(self):
+        return self.fields
+
+    def get_minimal(self):
+        return self.FORMAT_MINIMAL
+
+    def get_default(self):
+        return self.FORMAT_DEFAULT
+
+    def format_valid(self):
+
+        # check format for duplicate separators
+        if self.remainder:
+            return False
+
+        # check if hashed is empty
+        if not len(self.hashed):
+            return False
+
+        # check if output is empty
+        if not len(self.output):
+            return False
+
+        # check hashed has only valid fields
+        for f in self.hashed:
+            if f not in self.fields:
+                return False
+
+        # check output has only valid fields
+        for f in self.output:
+            if f not in self.fields:
+                return False
+
+        # check hashed for duplicates
+        if len(self.hashed) > len(set(self.hashed)):
+            return False
+
+        # check output for duplicates
+        if len(self.output) > len(set(self.output)):
+            return False
+
+        return True
+
+    def __formatGetFields(self, feedreader):
+        feed = feedreader.get_feed()
+
+        try:
+            item = feed.entries[0]
+        except IndexError:
+            item = dict()
+
+        fields = ''
+
+        if hasattr(item, 'author'):
+            fields += 'a'
+        if hasattr(item, 'description'):
+            fields += 'd'
+        if hasattr(item, 'guid'):
+            fields += 'g'
+        if hasattr(item, 'link'):
+            fields += 'l'
+        if hasattr(item, 'published'):
+            fields += 'p'
+        if hasattr(item, 'summary'):
+            fields += 's'
+        if hasattr(item, 'title'):
+            fields += 't'
+
+        return fields
+
+
+# Implementing an rss feed get_feeder for dependency injection
+class FeedReader:
+    def __init__(self, url):
+        self.url = url
+
+    def get_feed(self):
+        try:
+            feed = feedparser.parse(self.url)
+            return feed
+        except:
+            return False
+
+
 # Implementing a ring buffer
 # https://www.safaribooksonline.com/library/view/python-cookbook/0596001673/ch05s19.html
 class RingBuffer:
@@ -492,65 +620,3 @@ class RingBuffer:
     def get(self):
         """ return a list of elements from the oldest to the newest. """
         return self.data
-
-
-# Implementing an rss feed reader for dependency injection
-class FeedReader:
-    def __init__(self, url):
-        self.url = url
-
-    def read(self):
-        try:
-            feed = feedparser.parse(self.url)
-            return feed
-        except:
-            return False
-
-
-# Implementing an rss format handler
-#
-# Syntax of format:
-#
-# <hashed_fields>+<output_fields>
-#
-# fields:
-# d = description
-# l = link
-# t = title
-#
-class FeedFormater:
-    def __init__(self, format, feedreader):
-        self.format = format
-        self.fields = self.__formatGetFields(feedreader)
-
-    def get_format(self):
-        return self.format
-
-    def get_fields(self):
-        return self.fields
-
-    def __formatGetFields(self, feedreader):
-        feed = feedreader.read()
-        item = feed.entries[0]
-        fields = ''
-
-        if hasattr(item, 'author'):
-            fields += 'a'
-        if hasattr(item, 'description'):
-            fields += 'd'
-        if hasattr(item, 'guid'):
-            fields += 'g'
-        if hasattr(item, 'link'):
-            fields += 'l'
-        if hasattr(item, 'published'):
-            fields += 'p'
-        if hasattr(item, 'summary'):
-            fields += 's'
-        if hasattr(item, 'title'):
-            fields += 't'
-
-        return fields
-
-
-
-
