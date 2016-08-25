@@ -30,19 +30,21 @@ def setup(bot):
 
 def shutdown(bot):
     __configSave(bot)
-    __dbSaveAllHashesToDatabase(bot)
 
 
 @require_admin
 @commands('rssadd')
 def rssadd(bot, trigger):
-    if trigger.group(3) is None or trigger.group(4) is None or trigger.group(5) is None or not trigger.group(6) is None:
-        bot.say('syntax: {}{} <channel> <name> <url>'.format(bot.config.core.prefix, trigger.group(1)))
+    if trigger.group(3) is None or trigger.group(4) is None or trigger.group(5) is None or not trigger.group(7) is None:
+        bot.say('syntax: {}{} <channel> <name> <url> [<format>]'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
     channel = trigger.group(3)
     feedname = trigger.group(4)
     url = trigger.group(5)
-    __rssadd(bot, channel, feedname, url)
+    format = FORMAT_DEFAULT
+    if trigger(6):
+        format = trigger(6)
+    __rssAdd(bot, channel, feedname, url, format)
     return NOLIMIT
 
 
@@ -53,7 +55,7 @@ def rssdel(bot, trigger):
         bot.say('syntax: {}{} <name>'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
     feedname = trigger.group(3)
-    __rssdel(bot, feedname)
+    __rssDel(bot, feedname)
     return NOLIMIT
 
 
@@ -67,7 +69,7 @@ def rssget(bot, trigger):
     scope = ''
     if trigger.group(4):
         scope = trigger.group(4)
-    __rssget(bot, feedname, scope)
+    __rssGet(bot, feedname, scope)
     return NOLIMIT
 
 
@@ -77,7 +79,7 @@ def rssjoin(bot, trigger):
     if trigger.group(2) is not None:
         bot.say('syntax: {}{}'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
-    __rssjoin(bot)
+    __rssJoin(bot)
     return NOLIMIT
 
 
@@ -88,7 +90,7 @@ def rsslist(bot, trigger):
         bot.say('syntax: {}{} [<feed>|<channel>]'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
     arg = trigger.group(3)
-    __rsslist(bot, arg)
+    __rssList(bot, arg)
     return NOLIMIT
 
 
@@ -98,7 +100,7 @@ def rssupdate(bot, trigger):
     if not trigger.group(2) is None:
         bot.say('syntax: {}{}'.format(bot.config.core.prefix, trigger.group(1)))
         return NOLIMIT
-    __rssupdate(bot)
+    __rssUpdate(bot)
     return NOLIMIT
 
 
@@ -130,31 +132,9 @@ def __configRead(bot):
             except IndexError:
                 format = FORMAT_DEFAULT
 
-            # create new dict for feed properties
-            bot.memory['rss']['feeds'][feedname] = { 'channel': channel, 'name': feedname, 'url': url }
+            __feedAdd(bot, channel, feedname, url, format)
 
-            # create new RingBuffer for hashes of feed items
-            bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
-
-            # create new FeedFormater to store feed item fields and formats
-            bot.memory['rss']['formats'][feedname] = FeedFormater(format)
-
-            result = __dbCheckIfTableExists(bot, feedname)
-
-            # create hash table for this feed in sqlite3 database provided by the sopel framework
-            # use UNIQUE for column hash to minimize database writes by using
-            # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
-            if not result:
-                __dbCreateTable(bot, feedname)
-
-            # read hashes from database to memory
-            hashes = __dbReadHashesFromDatabase(bot, feedname)
-
-            # each hash in hashes consists of
-            # hash[0]: id
-            # hash[1]: md5 hash
-            for hash in hashes:
-                bot.memory['rss']['hashes'][feedname].append(hash[1])
+            __hashesAdd(bot, feedname)
 
     message = 'read config from disk'
     LOGGER.debug(message)
@@ -195,15 +175,14 @@ def __configSave(bot):
 
 
 def __dbCheckIfTableExists(bot, feedname):
-    tablename = __hashTablename(feedname)
+    tablename = __digestTablename(feedname)
     sql_check_table = "SELECT name FROM sqlite_master WHERE type='table' AND name=(?)"
     return bot.db.execute(sql_check_table, (tablename,)).fetchall()
 
 
 def __dbCreateTable(bot, feedname):
-    tablename = __hashTablename(feedname)
+    tablename = __digestTablename(feedname)
 
-    # create hash table for this feed in sqlite3 database provided by the sopel framework
     # use UNIQUE for column hash to minimize database writes by using
     # INSERT OR IGNORE (which is an abbreviation for INSERT ON CONFLICT IGNORE)
     sql_create_table = "CREATE TABLE '{}' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)".format(tablename)
@@ -213,7 +192,7 @@ def __dbCreateTable(bot, feedname):
 
 
 def __dbDropTable(bot, feedname):
-    tablename = __hashTablename(feedname)
+    tablename = __digestTablename(feedname)
     sql_drop_table = "DROP TABLE '{}'".format(tablename)
     bot.db.execute(sql_drop_table)
     message = 'dropped sqlite table "{}" of feed "{}"'.format(tablename, feedname)
@@ -221,13 +200,13 @@ def __dbDropTable(bot, feedname):
 
 
 def __dbGetNumberOfRows(bot, feedname):
-    tablename = __hashTablename(feedname)
+    tablename = __digestTablename(feedname)
     sql_count_hashes = "SELECT count(*) FROM '{}'".format(tablename)
     return bot.db.execute(sql_count_hashes).fetchall()[0][0]
 
 
 def __dbReadHashesFromDatabase(bot, feedname):
-    tablename = __hashTablename(feedname)
+    tablename = __digestTablename(feedname)
     sql_hashes = "SELECT * FROM '{}'".format(tablename)
     message = 'read hashes of feed "{}" from sqlite table "{}"'.format(feedname, tablename)
     LOGGER.debug(message)
@@ -235,7 +214,7 @@ def __dbReadHashesFromDatabase(bot, feedname):
 
 
 def __dbRemoveOldHashesFromDatabase(bot, feedname):
-    tablename = __hashTablename(feedname)
+    tablename = __digestTablename(feedname)
     rows = __dbGetNumberOfRows(bot, feedname)
 
     if rows > MAX_HASHES_PER_FEED:
@@ -259,7 +238,7 @@ def __dbRemoveOldHashesFromDatabase(bot, feedname):
 
 
 def __dbSaveHashToDatabase(bot, feedname, hash):
-    tablename = __hashTablename(feedname)
+    tablename = __digestTablename(feedname)
 
     # INSERT OR IGNORE is the short form of INSERT ON CONFLICT IGNORE
     sql_save_hashes = "INSERT OR IGNORE INTO '{}' VALUES (NULL,?)".format(tablename)
@@ -274,7 +253,7 @@ def __dbSaveHashToDatabase(bot, feedname, hash):
 
 
 def __dbSaveHashesToDatabase(bot, feedname):
-    tablename = __hashTablename(feedname)
+    tablename = __digestTablename(feedname)
     hashes = bot.memory['rss']['hashes'][feedname].get()
 
     # INSERT OR IGNORE is the short form of INSERT ON CONFLICT IGNORE
@@ -296,8 +275,20 @@ def __dbSaveAllHashesToDatabase(bot):
         __dbSaveHashesToDatabase(bot, feedname)
 
 
-def __feedAdd(bot, channel, feedname, url):
-    __dbCreateTable(bot, feedname)
+def __digestString(string):
+    return hashlib.md5(string.encode('utf-8')).hexdigest()
+
+
+def __digestTablename(tablename):
+    # we need to hash the name of the table as sqlite3 does not permit to substitute table names
+    return 'rss_' + __digestString(tablename)
+
+
+def __feedAdd(bot, channel, feedname, url, format):
+    # create hash table for this feed in sqlite3 database provided by the sopel framework
+    result = __dbCheckIfTableExists(bot, feedname)
+    if not result:
+        __dbCreateTable(bot, feedname)
 
     # create new RingBuffer for hashes of feed items
     bot.memory['rss']['hashes'][feedname] = RingBuffer(MAX_HASHES_PER_FEED)
@@ -305,7 +296,7 @@ def __feedAdd(bot, channel, feedname, url):
     LOGGER.debug(message)
 
     # create new RingBuffer for hashes of feed items
-    bot.memory['rss']['formats'][feedname] = FeedFormater(FORMAT_DEFAULT)
+    bot.memory['rss']['formats'][feedname] = FeedFormater(format, url)
     message = 'added feed formater for feed "{}"'.format(feedname)
     LOGGER.debug(message)
 
@@ -319,7 +310,6 @@ def __feedAdd(bot, channel, feedname, url):
 
 
 def __feedCheck(bot, feedreader, channel, feedname):
-
     result = []
 
     # read feed
@@ -382,7 +372,7 @@ def __feedUpdate(bot, feedreader, feedname, chatty):
 
     # bot.say new or all items
     for item in reversed(feed['entries']):
-        hash = __hashString(feedname + item['title'] + item['link'] + item['summary'])
+        hash = __digestString(feedname + item['title'] + item['link'] + item['summary'])
         new_item = not hash in bot.memory['rss']['hashes'][feedname].get()
         if chatty or new_item:
             if new_item:
@@ -394,16 +384,19 @@ def __feedUpdate(bot, feedreader, feedname, chatty):
             bot.say(message, channel)
 
 
-def __hashString(string):
-    return hashlib.md5(string.encode('utf-8')).hexdigest()
+def __hashesAdd(bot, feedname):
+
+    # read hashes from database to memory
+    hashes = __dbReadHashesFromDatabase(bot, feedname)
+
+    # each hash in hashes consists of
+    # hash[0]: id
+    # hash[1]: md5 hash
+    for hash in hashes:
+        bot.memory['rss']['hashes'][feedname].append(hash[1])
 
 
-def __hashTablename(tablename):
-    # we need to hash the name of the table as sqlite3 does not permit to substitute table names
-    return 'rss_' + __hashString(tablename)
-
-
-def __rssadd(bot, channel, feedname, url):
+def __rssAdd(bot, channel, feedname, url, format):
     feedreader = FeedReader(url)
     checkresults = __feedCheck(bot, feedreader, channel, feedname)
     if checkresults:
@@ -411,14 +404,14 @@ def __rssadd(bot, channel, feedname, url):
             LOGGER.debug(message)
             bot.say(message)
         return NOLIMIT
-    message = __feedAdd(bot, channel, feedname, url)
+    message = __feedAdd(bot, channel, feedname, url, format)
     bot.say(message)
     bot.join(channel)
     __configSave(bot)
     return NOLIMIT
 
 
-def __rssdel(bot, feedname):
+def __rssDel(bot, feedname):
     if not __feedExists(bot, feedname):
         bot.say('feed "{}" doesn\'t exist!'.format(feedname))
         return NOLIMIT
@@ -428,7 +421,7 @@ def __rssdel(bot, feedname):
     return NOLIMIT
 
 
-def __rssget(bot, feedname, scope = ''):
+def __rssGet(bot, feedname, scope =''):
     # if chatty is True then the bot will post feed items to a channel
     chatty = False
 
@@ -447,7 +440,7 @@ def __rssget(bot, feedname, scope = ''):
     return NOLIMIT
 
 
-def __rssjoin(bot):
+def __rssJoin(bot):
     for feedname, feed in bot.memory['rss']['feeds'].items():
         bot.join(feed['channel'])
     if bot.config.core.logging_channel:
@@ -455,7 +448,7 @@ def __rssjoin(bot):
     return NOLIMIT
 
 
-def __rsslist(bot, arg):
+def __rssList(bot, arg):
 
     # list feed
     if arg and __feedExists(bot, arg):
@@ -473,7 +466,7 @@ def __rsslist(bot, arg):
 
 
 @interval(UPDATE_INTERVAL)
-def __rssupdate(bot):
+def __rssUpdate(bot):
     for feedname in bot.memory['rss']['feeds']:
 
         # the conditional check is necessary to avoid
@@ -500,11 +493,13 @@ class FeedReader:
 
 
 class FeedFormater:
-    def __init__(self, format):
+    def __init__(self, format, url):
         self.format = format
+        self.url = url
 
     def get(self):
         return self.format
+
 
 
 # Implementing a ring buffer

@@ -13,44 +13,44 @@ import types
 
 
 FEED_VALID = '''<?xml version="1.0" encoding="utf-8" ?>
-<rss version="2.0" xml:base="https://www.site1.com/feed" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<rss version="2.0" xml:base="http://www.site1.com/feed" xmlns:dc="http://purl.org/dc/elements/1.1/">
 <channel>
 <title>Site 1 Articles</title>
-<link>https://www.site1.com/feed</link>
+<link>http://www.site1.com/feed</link>
 <description></description>
 <language>en</language>
 
 <item>
 <title>Title 3</title>
-<link>https://www.site1.com/article3</link>
+<link>http://www.site1.com/article3</link>
 <description>&lt;p&gt;Summary of article 3&lt;/p&gt;</description>
-<comments>https://www.site1.com/article3#comments</comments>
-<category domain="https://www.site1.com/term/2">Term 2</category>
+<comments>http://www.site1.com/article3#comments</comments>
+<category domain="http://www.site1.com/term/2">Term 2</category>
 <pubDate>Sat, 20 Aug 2016 03:00:00 +0000</pubDate>
 <dc:creator />
-<guid isPermaLink="false">3 at https://www.site1.com/</guid>
+<guid isPermaLink="false">3 at http://www.site1.com/</guid>
 </item>
 
 <item>
 <title>Title 2</title>
-<link>https://www.site1.com/article2</link>
+<link>http://www.site1.com/article2</link>
 <description>&lt;p&gt;Summary of article 2&lt;/p&gt;</description>
-<comments>https://www.site1.com/article2#comments</comments>
-<category domain="https://www.site1.com/term/1">Term 1</category>
+<comments>http://www.site1.com/article2#comments</comments>
+<category domain="http://www.site1.com/term/1">Term 1</category>
 <pubDate>Sat, 20 Aug 2016 01:00:00 +0000</pubDate>
 <dc:creator />
-<guid isPermaLink="false">2 at https://www.site1.com/</guid>
+<guid isPermaLink="false">2 at http://www.site1.com/</guid>
 </item>
 
 <item>
 <title>Title 1</title>
-<link>https://www.site1.com/article1</link>
+<link>http://www.site1.com/article1</link>
 <description>&lt;p&gt;Summary of article 1&lt;/p&gt;</description>
-<comments>https://www.site1.com/article1#comments</comments>
-<category domain="https://www.site1.com/term/1">Term 1</category>
+<comments>http://www.site1.com/article1#comments</comments>
+<category domain="http://www.site1.com/term/1">Term 1</category>
 <pubDate>Sat, 20 Aug 2016 01:00:00 +0000</pubDate>
 <dc:creator />
-<guid isPermaLink="false">1 at https://www.site1.com/</guid>
+<guid isPermaLink="false">1 at http://www.site1.com/</guid>
 </item>
 
 </channel>
@@ -58,14 +58,14 @@ FEED_VALID = '''<?xml version="1.0" encoding="utf-8" ?>
 
 
 FEED_ITEM_NEITHER_TITLE_NOR_DESCRIPTION = '''<?xml version="1.0" encoding="utf-8" ?>
-<rss version="2.0" xml:base="https://www.site1.com/feed" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<rss version="2.0" xml:base="http://www.site1.com/feed" xmlns:dc="http://purl.org/dc/elements/1.1/">
 <channel>
 <title>Site</title>
-<link>https://www.site.com/feed</link>
+<link>http://www.site.com/feed</link>
 <description></description>
 
 <item>
-<link>https://www.site.com/article</link>
+<link>http://www.site.com/article</link>
 </item>
 
 </channel>
@@ -97,11 +97,11 @@ def __fixtureBotSetup(request):
     return bot
 
 
-def __fixtureBotAddData(bot, id, format, url):
+def __fixtureBotAddData(bot, id, url, format):
     bot.memory['rss']['feeds']['feed'+id] = {'channel': '#channel' + id, 'name': 'feed' + id, 'url': url}
     bot.memory['rss']['hashes']['feed'+id] = rss.RingBuffer(100)
-    bot.memory['rss']['formats']['feed'+id] = rss.FeedFormater(format)
-    sql_create_table = 'CREATE TABLE ' + rss.__hashTablename('feed'+id) + ' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)'
+    bot.memory['rss']['formats']['feed'+id] = rss.FeedFormater(format, url)
+    sql_create_table = 'CREATE TABLE ' + rss.__digestTablename('feed'+id) + ' (id INTEGER PRIMARY KEY, hash VARCHAR(32) UNIQUE)'
     bot.db.execute(sql_create_table)
     bot.channels = ['#channel'+id]
     return bot
@@ -110,7 +110,7 @@ def __fixtureBotAddData(bot, id, format, url):
 @pytest.fixture(scope="function")
 def bot(request):
     bot = __fixtureBotSetup(request)
-    bot = __fixtureBotAddData(bot, '1', rss.FORMAT_DEFAULT, 'http://www.site1.com/feed')
+    bot = __fixtureBotAddData(bot, '1', 'http://www.site1.com/feed', rss.FORMAT_DEFAULT, )
     return bot
 
 
@@ -123,22 +123,22 @@ def bot_config_read(request):
 @pytest.fixture(scope="function")
 def bot_config_save(request):
     bot = __fixtureBotSetup(request)
-    bot = __fixtureBotAddData(bot, '1', rss.FORMAT_DEFAULT, 'http://www.site1.com/feed')
+    bot = __fixtureBotAddData(bot, '1', 'http://www.site1.com/feed', rss.FORMAT_DEFAULT)
     return bot
 
 
 @pytest.fixture(scope="function")
-def bot_rsslist(request):
+def bot_rssList(request):
     bot = __fixtureBotSetup(request)
-    bot = __fixtureBotAddData(bot, '1', rss.FORMAT_DEFAULT, 'http://www.site1.com/feed')
-    bot = __fixtureBotAddData(bot, '2', rss.FORMAT_DEFAULT, 'http://www.site2.com/feed')
+    bot = __fixtureBotAddData(bot, '1', 'http://www.site1.com/feed', rss.FORMAT_DEFAULT)
+    bot = __fixtureBotAddData(bot, '2', 'http://www.site2.com/feed', rss.FORMAT_DEFAULT, )
     return bot
 
 
 @pytest.fixture(scope="function")
-def bot_rssupdate(request):
+def bot_rssUpdate(request):
     bot = __fixtureBotSetup(request)
-    bot = __fixtureBotAddData(bot, '1', rss.FORMAT_DEFAULT, FEED_VALID)
+    bot = __fixtureBotAddData(bot, '1', FEED_VALID, rss.FORMAT_DEFAULT)
     return bot
 
 
@@ -221,7 +221,7 @@ feeds = #channel1 feed1 http://www.site1.com/feed
 def test_dbCreateTable_and_dbCheckIfTableExists(bot):
     rss.__dbCreateTable(bot, 'feedname')
     result = rss.__dbCheckIfTableExists(bot, 'feedname')
-    assert [(rss.__hashTablename('feedname'),)] == result
+    assert [(rss.__digestTablename('feedname'),)] == result
 
 
 def test_dbDropTable(bot):
@@ -234,7 +234,7 @@ def test_dbDropTable(bot):
 def test_dbGetNumerOfRows(bot):
     ROWS = 10
     for i in range(ROWS):
-        hash = rss.__hashString(str(i))
+        hash = rss.__digestString(str(i))
         bot.memory['rss']['hashes']['feed1'].append(hash)
     rss.__dbSaveHashesToDatabase(bot, 'feed1')
     rows_feed = rss.__dbGetNumberOfRows(bot, 'feed1')
@@ -245,7 +245,7 @@ def test_dbRemoveOldHashesFromDatabase(bot):
     SURPLUS_ROWS = 10
     bot.memory['rss']['hashes']['feed1'] = rss.RingBuffer(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS)
     for i in range(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS):
-        hash = rss.__hashString(str(i))
+        hash = rss.__digestString(str(i))
         bot.memory['rss']['hashes']['feed1'].append(hash)
     rss.__dbSaveHashesToDatabase(bot, 'feed1')
     rss.__dbRemoveOldHashesFromDatabase(bot, 'feed1')
@@ -253,7 +253,7 @@ def test_dbRemoveOldHashesFromDatabase(bot):
     assert rss.MAX_HASHES_PER_FEED == rows_feed
 
 
-def test_dbSaveHashToDatabase(bot, feedreader_feed_valid):
+def test_dbSaveHashToDatabase(bot):
     rss.__dbSaveHashToDatabase(bot, 'feed1', '463f9357db6c20a94a68f9c9ef3bb0fb')
     hashes = rss.__dbReadHashesFromDatabase(bot, 'feed1')
     expected = [(1, '463f9357db6c20a94a68f9c9ef3bb0fb')]
@@ -262,29 +262,39 @@ def test_dbSaveHashToDatabase(bot, feedreader_feed_valid):
 
 def test_dbSaveAllHashesToDatabase(bot, feedreader_feed_valid):
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
-    rss.__feedAdd(bot, 'channel2', 'feed2', 'https://www.site2.com/feed')
+    rss.__feedAdd(bot, 'channel2', 'feed2', 'http://www.site2.com/feed', rss.FORMAT_DEFAULT)
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed2', True)
     rss.__dbSaveAllHashesToDatabase(bot)
     hashes1 = rss.__dbReadHashesFromDatabase(bot, 'feed1')
     hashes2 = rss.__dbReadHashesFromDatabase(bot, 'feed1')
-    expected = [(1, '463f9357db6c20a94a68f9c9ef3bb0fb'), (2, 'af2110eedcbb16781bb46d8e7ca293fe'), (3, '309be3bef1ff3e13e9dbfc010b25fd9c')]
+    expected = [(1, '757eab7d0c4f7c6302cf57647d189c3d'), (2, 'b102c2a7acb849f1f583acbd1993e1b0'), (3, '1a3ec7ff94952a9ac1fa157caddcca65')]
     assert expected == hashes1
     assert expected == hashes2
 
 
+def test_digestString_works():
+    digest = rss.__digestString('thisisatest')
+    assert 'f830f69d23b8224b512a0dc2f5aec974' == digest
+
+
+def test_digestTablename_works():
+    digest = rss.__digestTablename('thisisatest')
+    assert 'rss_f830f69d23b8224b512a0dc2f5aec974' == digest
+
+
 def test_feedAdd_create_db_table(bot):
-    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed', rss.FORMAT_DEFAULT)
     result = rss.__dbCheckIfTableExists(bot, 'feedname')
-    assert [(rss.__hashTablename('feedname'),)] == result
+    assert [(rss.__digestTablename('feedname'),)] == result
 
 
 def test_feedAdd_create_ring_buffer(bot):
-    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed', rss.FORMAT_DEFAULT)
     assert type(bot.memory['rss']['hashes']['feedname']) == rss.RingBuffer
 
 
 def test_feedAdd_create_feed(bot):
-    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed', rss.FORMAT_DEFAULT)
     feed = bot.memory['rss']['feeds']['feedname']
     assert {'name': 'feedname', 'url': 'http://www.site.com/feed', 'channel': '#channel'} == feed
 
@@ -310,20 +320,20 @@ def test_feedCheck_feeditem_must_have_title_or_description(bot, feedreader_feed_
 
 
 def test_feedDelete_delete_db_table(bot):
-    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed', rss.FORMAT_DEFAULT)
     rss.__feedDelete(bot, 'feedname')
     result = rss.__dbCheckIfTableExists(bot, 'feedname')
     assert [] == result
 
 
 def test_feedDelete_delete_ring_buffer(bot):
-    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed')
+    rss.__feedAdd(bot, '#channel', 'feedname', 'http://www.site.com/feed', rss.FORMAT_DEFAULT)
     rss.__feedDelete(bot, 'feedname')
     assert 'feedname' not in bot.memory['rss']['hashes']
 
 
 def test_feedDelete_delete_feed(bot):
-    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed')
+    rss.__feedAdd(bot, 'channel', 'feed', 'http://www.site.com/feed', rss.FORMAT_DEFAULT)
     rss.__feedDelete(bot, 'feed')
     assert 'feed' not in bot.memory['rss']['feeds']
 
@@ -338,13 +348,13 @@ def test_feedExists_fails(bot):
 
 def test_feedUpdate_print_messages(bot, feedreader_feed_valid):
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
-    expected = bold('[feed1]') + ' Title 1 ' + bold('→') + " https://www.site1.com/article1\n" + bold('[feed1]') + ' Title 2 ' + bold('→') + " https://www.site1.com/article2\n" + bold('[feed1]') + ' Title 3 ' + bold('→') + " https://www.site1.com/article3\n"
+    expected = bold('[feed1]') + ' Title 1 ' + bold('→') + " http://www.site1.com/article1\n" + bold('[feed1]') + ' Title 2 ' + bold('→') + " http://www.site1.com/article2\n" + bold('[feed1]') + ' Title 3 ' + bold('→') + " http://www.site1.com/article3\n"
     assert expected == bot.output
 
 
 def test_feedUpdate_store_hashes(bot, feedreader_feed_valid):
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
-    expected = ['463f9357db6c20a94a68f9c9ef3bb0fb', 'af2110eedcbb16781bb46d8e7ca293fe', '309be3bef1ff3e13e9dbfc010b25fd9c']
+    expected = ['757eab7d0c4f7c6302cf57647d189c3d', 'b102c2a7acb849f1f583acbd1993e1b0', '1a3ec7ff94952a9ac1fa157caddcca65']
     hashes = bot.memory['rss']['hashes']['feed1'].get()
     assert expected == hashes
 
@@ -356,44 +366,43 @@ def test_feedUpdate_no_update(bot, feedreader_feed_valid):
     assert '' == bot.output
 
 
-def test_hashString_works():
-    hash = rss.__hashString('thisisatest')
-    assert 'f830f69d23b8224b512a0dc2f5aec974' == hash
+def test_hashesAdd(bot, feedreader_feed_valid):
+    rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
+    expected = ['757eab7d0c4f7c6302cf57647d189c3d', 'b102c2a7acb849f1f583acbd1993e1b0', '1a3ec7ff94952a9ac1fa157caddcca65']
+    bot.memory['rss']['hashes']['feed1'] = rss.RingBuffer(100)
+    rss.__hashesAdd(bot, 'feed1')
+    hashes = bot.memory['rss']['hashes']['feed1'].get()
+    assert expected == hashes
 
 
-def test_hashTablename_works():
-    hash = rss.__hashTablename('thisisatest')
-    assert 'rss_f830f69d23b8224b512a0dc2f5aec974' == hash
-
-
-def test_rssadd(bot):
-    rss.__rssadd(bot, '#channel', 'feedname', FEED_VALID)
+def test_rssAdd(bot):
+    rss.__rssAdd(bot, '#channel', 'feedname', FEED_VALID, rss.FORMAT_DEFAULT)
     assert rss.__feedExists(bot, 'feedname') == True
 
 
-def test_rssdel(bot):
-    rss.__rssadd(bot, '#channel', 'feedname', FEED_VALID)
-    rss.__rssdel(bot, 'feedname')
+def test_rssDel(bot):
+    rss.__rssAdd(bot, '#channel', 'feedname', FEED_VALID, rss.FORMAT_DEFAULT)
+    rss.__rssDel(bot, 'feedname')
     assert rss.__feedExists(bot, 'feedname') == False
 
 
-def test_rssget_update(bot):
-    rss.__feedAdd(bot, '#channel', 'feedname', FEED_VALID)
-    rss.__rssget(bot, 'feedname', 'all')
+def test_rssGet_update(bot):
+    rss.__feedAdd(bot, '#channel', 'feedname', FEED_VALID, rss.FORMAT_DEFAULT)
+    rss.__rssGet(bot, 'feedname', 'all')
     bot.output = ''
-    rss.__rssget(bot, 'feedname')
+    rss.__rssGet(bot, 'feedname')
     assert '' == bot.output
 
 
-def test_rssget_all(bot):
-    rss.__feedAdd(bot, '#channel', 'feedname', FEED_VALID)
-    rss.__rssget(bot, 'feedname', 'all')
-    expected = bold('[feedname]') + ' Title 1 ' + bold('→') + " https://www.site1.com/article1\n" + bold('[feedname]') + ' Title 2 ' + bold('→') + " https://www.site1.com/article2\n" + bold('[feedname]') + ' Title 3 ' + bold('→') + " https://www.site1.com/article3\n"
+def test_rssGet_all(bot):
+    rss.__feedAdd(bot, '#channel', 'feedname', FEED_VALID, rss.FORMAT_DEFAULT)
+    rss.__rssGet(bot, 'feedname', 'all')
+    expected = bold('[feedname]') + ' Title 1 ' + bold('→') + " http://www.site1.com/article1\n" + bold('[feedname]') + ' Title 2 ' + bold('→') + " http://www.site1.com/article2\n" + bold('[feedname]') + ' Title 3 ' + bold('→') + " http://www.site1.com/article3\n"
     assert expected == bot.output
 
 
-def test_rssjoin(bot):
-    rss.__rssjoin(bot)
+def test_rssJoin(bot):
+    rss.__rssJoin(bot)
     channels = []
     for feed in bot.memory['rss']['feeds']:
         feedchannel = bot.memory['rss']['feeds'][feed]['channel']
@@ -402,46 +411,46 @@ def test_rssjoin(bot):
     assert channels == bot.channels
 
 
-def test_rsslist_all(bot_rsslist):
-    rss.__rsslist(bot_rsslist, '')
+def test_rssList_all(bot_rssList):
+    rss.__rssList(bot_rssList, '')
     expected1 = '#channel1 feed1 http://www.site1.com/feed'
     expected2 = '#channel2 feed2 http://www.site2.com/feed'
-    assert expected1 in bot_rsslist.output
-    assert expected2 in bot_rsslist.output
+    assert expected1 in bot_rssList.output
+    assert expected2 in bot_rssList.output
 
 
-def test_rsslist_feed(bot):
-    rss.__rsslist(bot, 'feed1')
+def test_rssList_feed(bot):
+    rss.__rssList(bot, 'feed1')
     expected = '#channel1 feed1 http://www.site1.com/feed\n'
     assert expected == bot.output
 
 
-def test_rsslist_channel(bot):
-    rss.__rsslist(bot, '#channel1')
+def test_rssList_channel(bot):
+    rss.__rssList(bot, '#channel1')
     expected = '#channel1 feed1 http://www.site1.com/feed\n'
     assert expected == bot.output
 
 
-def test_rsslist_no_feed_found(bot):
-    rss.__rsslist(bot, 'invalid')
+def test_rssList_no_feed_found(bot):
+    rss.__rssList(bot, 'invalid')
     assert '' == bot.output
 
 
-def test_rssupdate_update(bot_rssupdate):
-    rss.__rssupdate(bot_rssupdate)
-    expected = bold('[feed1]') + ' Title 1 ' + bold('→') + " https://www.site1.com/article1\n" + bold('[feed1]') + ' Title 2 ' + bold('→') + " https://www.site1.com/article2\n" + bold('[feed1]') + ' Title 3 ' + bold('→') + " https://www.site1.com/article3\n"
-    assert expected == bot_rssupdate.output
+def test_rssUpdate_update(bot_rssUpdate):
+    rss.__rssUpdate(bot_rssUpdate)
+    expected = bold('[feed1]') + ' Title 1 ' + bold('→') + " http://www.site1.com/article1\n" + bold('[feed1]') + ' Title 2 ' + bold('→') + " http://www.site1.com/article2\n" + bold('[feed1]') + ' Title 3 ' + bold('→') + " http://www.site1.com/article3\n"
+    assert expected == bot_rssUpdate.output
 
 
-def test_rssupdate_no_update(bot_rssupdate):
-    rss.__rssupdate(bot_rssupdate)
+def test_rssUpdate_no_update(bot_rssUpdate):
+    rss.__rssUpdate(bot_rssUpdate)
     bot.output = ''
-    rss.__rssupdate(bot_rssupdate)
+    rss.__rssUpdate(bot_rssUpdate)
     assert '' == bot.output
 
 
 def test_FeedFormater_get():
-    ff = rss.FeedFormater('value')
+    ff = rss.FeedFormater('value', 'http://www.site.com/feed')
     assert 'value' == ff.get()
 
 
