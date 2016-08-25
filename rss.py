@@ -470,8 +470,12 @@ def __rssUpdate(bot):
 # <hashed_fields>+<output_fields>
 #
 # fields:
+# a = author
 # d = description
+# g = guid (unique identifier)
 # l = link
+# p = published (time)
+# s = summary
 # t = title
 #
 class FeedFormater:
@@ -481,7 +485,6 @@ class FeedFormater:
     def __init__(self, feedreader, format=''):
         self.separator = '+'
         self.FORMAT_DEFAULT = 'l+tl'
-        self.FORMAT_MINIMAL = 't+t'
         self.fields = self.__formatGetFields(feedreader)
 
         if not format:
@@ -510,7 +513,9 @@ class FeedFormater:
         return self.fields
 
     def get_minimal(self):
-        return self.FORMAT_MINIMAL
+        if 't' in self.fields:
+            return 't+t'
+        return 'd+d'
 
     def get_default(self):
         return self.FORMAT_DEFAULT
