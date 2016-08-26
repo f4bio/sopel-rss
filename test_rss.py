@@ -5,7 +5,7 @@ from sopel.formatting import bold
 from sopel.modules import rss
 from sopel.test_tools import MockSopel, MockConfig
 import feedparser
-import fileinput
+import hashlib
 import os
 import pytest
 import tempfile
@@ -221,7 +221,7 @@ def test_dbDropTable(bot):
 def test_dbGetNumerOfRows(bot):
     ROWS = 10
     for i in range(ROWS):
-        hash = rss.__digestString(str(i))
+        hash = rss.hashlib.md5(str(i).encode('utf-8')).hexdigest()
         bot.memory['rss']['hashes']['feed1'].append(hash)
     rss.__dbSaveHashesToDatabase(bot, 'feed1')
     rows_feed = rss.__dbGetNumberOfRows(bot, 'feed1')
@@ -232,7 +232,7 @@ def test_dbRemoveOldHashesFromDatabase(bot):
     SURPLUS_ROWS = 10
     bot.memory['rss']['hashes']['feed1'] = rss.RingBuffer(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS)
     for i in range(rss.MAX_HASHES_PER_FEED + SURPLUS_ROWS):
-        hash = rss.__digestString(str(i))
+        hash = hashlib.md5(str(i).encode('utf-8')).hexdigest()
         bot.memory['rss']['hashes']['feed1'].append(hash)
     rss.__dbSaveHashesToDatabase(bot, 'feed1')
     rss.__dbRemoveOldHashesFromDatabase(bot, 'feed1')
@@ -245,11 +245,6 @@ def test_dbSaveHashToDatabase(bot):
     hashes = rss.__dbReadHashesFromDatabase(bot, 'feed1')
     expected = [(1, '463f9357db6c20a94a68f9c9ef3bb0fb')]
     assert expected == hashes
-
-
-def test_digestString_works():
-    digest = rss.__digestString('thisisatest')
-    assert 'f830f69d23b8224b512a0dc2f5aec974' == digest
 
 
 def test_digestTablename_works():
@@ -321,6 +316,14 @@ def test_feedExists_fails(bot):
     assert rss.__feedExists(bot, 'nofeed') == False
 
 
+def test_feedList_format(bot):
+    rss.__feedAdd(bot, 'channel', 'feed', FEED_VALID, 'ft+ftldsapg')
+    rss.__feedList(bot, 'feed')
+    expected = 'channel feed ' + FEED_VALID + ' ft+ftldsapg\n'
+    output = bot.output
+    assert expected == bot.output
+
+
 def test_feedUpdate_print_messages(bot, feedreader_feed_valid):
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
     expected = bold('[feed1]') + ' Title 1 ' + bold('→') + " http://www.site1.com/article1\n" + bold('[feed1]') + ' Title 2 ' + bold('→') + " http://www.site1.com/article2\n" + bold('[feed1]') + ' Title 3 ' + bold('→') + " http://www.site1.com/article3\n"
@@ -329,7 +332,7 @@ def test_feedUpdate_print_messages(bot, feedreader_feed_valid):
 
 def test_feedUpdate_store_hashes(bot, feedreader_feed_valid):
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
-    expected = ['6f3dd3586025284b82ec0c02aeb46dbe', '7187b3dcf3d1a076f99002f25f167cea', 'b2009fd48b96cfeba9a20b18ec494c35']
+    expected = ['4a8c89da09811991825b2263a4f9a7e0', '1f1c02250ee0f37ee99542a58fe266de', '53d66294d8b4313baf22d3ef62cb4cec']
     hashes = bot.memory['rss']['hashes']['feed1'].get()
     assert expected == hashes
 
@@ -343,7 +346,7 @@ def test_feedUpdate_no_update(bot, feedreader_feed_valid):
 
 def test_hashesRead(bot, feedreader_feed_valid):
     rss.__feedUpdate(bot, feedreader_feed_valid, 'feed1', True)
-    expected = ['6f3dd3586025284b82ec0c02aeb46dbe', '7187b3dcf3d1a076f99002f25f167cea', 'b2009fd48b96cfeba9a20b18ec494c35']
+    expected = ['4a8c89da09811991825b2263a4f9a7e0', '1f1c02250ee0f37ee99542a58fe266de', '53d66294d8b4313baf22d3ef62cb4cec']
     bot.memory['rss']['hashes']['feed1'] = rss.RingBuffer(100)
     rss.__hashesRead(bot, 'feed1')
     hashes = bot.memory['rss']['hashes']['feed1'].get()
@@ -437,7 +440,7 @@ def test_FeedFormater_get_format_default(feedreader_feed_valid):
 def test_FeedFormater_get_fields_feed_valid(feedreader_feed_valid):
     ff = rss.FeedFormater(feedreader_feed_valid)
     fields = ff.get_fields()
-    assert 'adglpst' == fields
+    assert 'fadglpst' == fields
 
 
 def test_FeedFormater_get_fields_feed_item_neither_title_nor_description(feedreader_feed_item_neither_title_nor_description):
@@ -448,43 +451,49 @@ def test_FeedFormater_get_fields_feed_item_neither_title_nor_description(feedrea
 
 def test_FeedFormater_check_format_default(feedreader_feed_valid):
     ff = rss.FeedFormater(feedreader_feed_valid)
-    format_valid = ff.format_valid()
-    assert True == format_valid
-
-
-def test_FeedFormater_check_format_output_empty(feedreader_feed_valid):
-    format = 't'
-    ff = rss.FeedFormater(feedreader_feed_valid, format)
-    format_valid = ff.format_valid()
-    assert False == format_valid
+    assert ff.get_default() == ff.get_format()
 
 
 def test_FeedFormater_check_format_hashed_empty(feedreader_feed_valid):
     format = '+t'
     ff = rss.FeedFormater(feedreader_feed_valid, format)
-    format_valid = ff.format_valid()
-    assert False == format_valid
+    assert format != ff.get_format()
+
+
+def test_FeedFormater_check_format_output_empty(feedreader_feed_valid):
+    format = 't'
+    ff = rss.FeedFormater(feedreader_feed_valid, format)
+    assert format != ff.get_format()
+
+
+def test_FeedFormater_check_format_hashed_only_feedname(feedreader_feed_valid):
+    format = 'f+t'
+    ff = rss.FeedFormater(feedreader_feed_valid, format)
+    assert format != ff.get_format()
+
+
+def test_FeedFormater_check_format_output_only_feedname(feedreader_feed_valid):
+    format = 't+f'
+    ff = rss.FeedFormater(feedreader_feed_valid, format)
+    assert format != ff.get_format()
 
 
 def test_FeedFormater_check_format_duplicate_separator(feedreader_feed_valid):
     format = 't+t+t'
     ff = rss.FeedFormater(feedreader_feed_valid, format)
-    format_valid = ff.format_valid()
-    assert False == format_valid
+    assert format != ff.get_format()
 
 
 def test_FeedFormater_check_format_duplicate_field_hashed(feedreader_feed_valid):
     format = 'll+t'
     ff = rss.FeedFormater(feedreader_feed_valid, format)
-    format_valid = ff.format_valid()
-    assert False == format_valid
+    assert format != ff.get_format()
 
 
 def test_FeedFormater_check_format_duplicate_field_output(feedreader_feed_valid):
     format = 'l+tll'
     ff = rss.FeedFormater(feedreader_feed_valid, format)
-    format_valid = ff.format_valid()
-    assert False == format_valid
+    assert format != ff.get_format()
 
 
 def test_RingBuffer_append():
