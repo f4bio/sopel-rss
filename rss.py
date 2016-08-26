@@ -467,21 +467,6 @@ def __rssUpdate(bot):
 
 
 # Implementing an rss format handler
-#
-# Syntax of format:
-#
-# <hashed_fields>+<output_fields>
-#
-# fields:
-# f = feedname (the custom sopel-rss name, no feed item field)
-# a = author
-# d = description
-# g = guid (unique identifier)
-# l = link
-# p = published (time)
-# s = summary
-# t = title
-#
 class FeedFormater:
 
     LOGGER = get_logger(__name__)
