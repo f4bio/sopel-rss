@@ -57,6 +57,29 @@ def rssdel(bot, trigger):
 
 
 @require_admin
+@commands('rssfields')
+def rssfields(bot, trigger):
+    if trigger.group(3) is None or not trigger.group(4) is None:
+        bot.say('syntax: {}{} <name>'.format(bot.config.core.prefix, trigger.group(1)))
+        return
+    feedname = trigger.group(3)
+    __rssFields(bot, feedname)
+
+
+@require_admin
+@commands('rssformat')
+def rssdel(bot, trigger):
+    if trigger.group(3) is None or trigger.group(5):
+        bot.say('syntax: {}{} <name> [<format>]'.format(bot.config.core.prefix, trigger.group(1)))
+        return
+    feedname = trigger.group(3)
+    format = ''
+    if trigger.group(4):
+        format = trigger.group(4)
+    __rssFormat(bot, feedname, format)
+
+
+@require_admin
 @commands('rssget')
 def rssget(bot, trigger):
     if trigger.group(3) is None or (trigger.group(4) and trigger.group(4) != 'all') or trigger.group(5):
@@ -414,6 +437,32 @@ def __rssDel(bot, feedname):
     __configSave(bot)
 
 
+def __rssFields(bot, feedname):
+    if not __feedExists(bot, feedname):
+        message = 'feed "{}" doesn\'t exist!'.format(feedname)
+        bot.say(message)
+        return
+    fields = bot.memory['rss']['formats'][feedname].get_fields()
+    message = 'fields of feed "{}" are "{}"'.format(feedname, fields)
+    bot.say(message)
+
+
+def __rssFormat(bot, feedname, format):
+    if not __feedExists(bot, feedname):
+        message = 'feed "{}" doesn\'t exist!'.format(feedname)
+        bot.say(message)
+        return
+    bot.memory['rss']['formats'][feedname].set_format(format)
+    format_new = bot.memory['rss']['formats'][feedname].get_format()
+    message = 'format of feed "{}" has been set to "{}"'.format(feedname, format_new)
+    LOGGER.debug(message)
+    bot.say(message)
+
+    if format != format_new:
+        message = 'consider {}rssfields {} to create a valid format'.format(bot.config.core.prefix, feedname)
+        bot.say(message)
+
+
 def __rssGet(bot, feedname, scope =''):
     # if chatty is True then the bot will post feed items to a channel
     chatty = False
@@ -422,7 +471,7 @@ def __rssGet(bot, feedname, scope =''):
         chatty = True
 
     if not __feedExists(bot, feedname):
-        message = 'feed {} doesn\'t exist'.format(feedname)
+        message = 'feed "{}" doesn\'t exist!'.format(feedname)
         LOGGER.debug(message)
         bot.say(message)
         return
@@ -486,16 +535,30 @@ class FeedFormater:
     def get_fields(self):
         return self.fields
 
+    def __createFullItem(self, key, item):
+        if hasattr(item, key):
+            return item[key]
+        return ''
+
     def get_hash(self, feedname, item):
+        fullitem = dict()
+        fullitem['author'] = self.__createFullItem('author', item)
+        fullitem['description'] = self.__createFullItem('description', item)
+        fullitem['guid'] = self.__createFullItem('guid', item)
+        fullitem['link'] = self.__createFullItem('link', item)
+        fullitem['published'] = self.__createFullItem('published', item)
+        fullitem['summary'] = self.__createFullItem('summary', item)
+        fullitem['title'] = self.__createFullItem('title', item)
+
         legend = {
             'f': feedname,
-            'a': item['author'],
-            'd': item['description'],
-            'g': item['guid'],
-            'l': item['link'],
-            'p': item['published'],
-            's': item['summary'],
-            't': item['title'],
+            'a': fullitem['author'],
+            'd': fullitem['description'],
+            'g': fullitem['guid'],
+            'l': fullitem['link'],
+            'p': fullitem['published'],
+            's': fullitem['summary'],
+            't': fullitem['title'],
         }
 
         signature = ''
@@ -513,15 +576,27 @@ class FeedFormater:
         return 'fd+fd'
 
     def get_post(self, feedname, item):
+        fullitem = dict()
+        fullitem['author'] = self.__createFullItem('author', item)
+        fullitem['description'] = self.__createFullItem('description', item)
+        fullitem['guid'] = self.__createFullItem('guid', item)
+        fullitem['link'] = self.__createFullItem('link', item)
+        fullitem['summary'] = self.__createFullItem('summary', item)
+        fullitem['title'] = self.__createFullItem('title', item)
+
+        pubtime = ''
+        if 'p' in self.output:
+            pubtime = time.strftime('%Y-%m-%d %H:%M', item['published_parsed'])
+
         legend = {
             'f': bold('[' + feedname + ']'),
-            'a': '| ' + item['author'],
-            'd': '| ' + item['description'],
-            'g': '| ' + item['guid'],
-            'l': bold('→') + ' ' + item['link'],
-            'p': '| ' + item['published'],
-            's': '| ' + item['summary'],
-            't': item['title'],
+            'a': '<' + fullitem['author'] + '>',
+            'd': '|' + fullitem['description'] + '|',
+            'g': '{' + fullitem['guid'] + '}',
+            'l': bold('→') + ' ' + fullitem['link'],
+            'p': '(' + pubtime + ')',
+            's': '«' + fullitem['summary']+ '»',
+            't': fullitem['title'],
         }
 
         post = ''
@@ -554,7 +629,7 @@ class FeedFormater:
             fields += 'g'
         if hasattr(item, 'link'):
             fields += 'l'
-        if hasattr(item, 'published'):
+        if hasattr(item, 'published') and hasattr(item, 'published_parsed'):
             fields += 'p'
         if hasattr(item, 'summary'):
             fields += 's'

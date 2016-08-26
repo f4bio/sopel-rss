@@ -23,7 +23,7 @@ FEED_VALID = '''<?xml version="1.0" encoding="utf-8" ?>
 <item>
 <title>Title 3</title>
 <link>http://www.site1.com/article3</link>
-<description>&lt;p&gt;Descriptior of article 3&lt;/p&gt;</description>
+<description>&lt;p&gt;Description of article 3&lt;/p&gt;</description>
 <summary>&lt;p&gt;Summary of article 3&lt;/p&gt;</summary>
 <author>Author 3</author>
 <pubDate>Sat, 23 Aug 2016 03:30:33 +0000</pubDate>
@@ -33,7 +33,7 @@ FEED_VALID = '''<?xml version="1.0" encoding="utf-8" ?>
 <item>
 <title>Title 2</title>
 <link>http://www.site1.com/article2</link>
-<description>&lt;p&gt;Descriptior of article 2&lt;/p&gt;</description>
+<description>&lt;p&gt;Description of article 2&lt;/p&gt;</description>
 <summary>&lt;p&gt;Summary of article 2&lt;/p&gt;</summary>
 <author>Author 2</author>
 <pubDate>Sat, 22 Aug 2016 02:20:22 +0000</pubDate>
@@ -43,7 +43,7 @@ FEED_VALID = '''<?xml version="1.0" encoding="utf-8" ?>
 <item>
 <title>Title 1</title>
 <link>http://www.site1.com/article1</link>
-<description>&lt;p&gt;Descriptior of article 1&lt;/p&gt;</description>
+<description>&lt;p&gt;Description of article 1&lt;/p&gt;</description>
 <summary>&lt;p&gt;Summary of article 1&lt;/p&gt;</summary>
 <author>Author 1</author>
 <pubDate>Sat, 21 Aug 2016 01:10:11 +0000</pubDate>
@@ -353,15 +353,69 @@ def test_hashesRead(bot, feedreader_feed_valid):
     assert expected == hashes
 
 
-def test_rssAdd(bot):
+def test_rssAdd_feed_add(bot):
     rss.__rssAdd(bot, '#channel', 'feedname', FEED_VALID)
     assert rss.__feedExists(bot, 'feedname') == True
 
 
-def test_rssDel(bot):
+def test_rssDel_feed_nonexistent(bot):
+    rss.__rssDel(bot, 'abcd')
+    expected = 'feed "abcd" doesn\'t exist!\n'
+    assert expected == bot.output
+
+
+def test_rssDel_feed_delete(bot):
     rss.__rssAdd(bot, '#channel', 'feedname', FEED_VALID)
     rss.__rssDel(bot, 'feedname')
     assert rss.__feedExists(bot, 'feedname') == False
+
+
+def test_rssFields_feed_nonexistent(bot):
+    rss.__rssFields(bot, 'abcd')
+    expected = 'feed "abcd" doesn\'t exist!\n'
+    assert expected == bot.output
+
+
+def test_rssFields_get(bot):
+    rss.__rssFields(bot, 'feed1')
+    expected = 'fields of feed "feed1" are "fadglpst"\n'
+    assert expected == bot.output
+
+
+def test_rssFormat_feed_nonexistent(bot):
+    rss.__rssFormat(bot, 'abcd', '')
+    expected = 'feed "abcd" doesn\'t exist!\n'
+    assert expected == bot.output
+
+
+def test_rssFormat_format_changed(bot):
+    format_old = bot.memory['rss']['formats']['feed1'].get_format()
+    rss.__rssFormat(bot, 'feed1', 'asl+als')
+    format_new = bot.memory['rss']['formats']['feed1'].get_format()
+    assert format_old != format_new
+
+
+def test_rssFormat_format_set(bot):
+    rss.__rssFormat(bot, 'feed1', 'asl+als')
+    format_new = bot.memory['rss']['formats']['feed1'].get_format()
+    assert 'asl+als' == format_new
+
+
+def test_rssFormat_format_output(bot_rssUpdate):
+    rss.__rssFormat(bot_rssUpdate, 'feed1', 'fadglpst+fadglpst')
+    rss.__rssUpdate(bot_rssUpdate)
+    expected = '''format of feed "feed1" has been set to "fadglpst+fadglpst"
+\x02[feed1]\x02 <Author 1> |<p>Description of article 1</p>| {1 at http://www.site1.com/} \x02→\x02 http://www.site1.com/article1 (2016-08-21 01:10) «<p>Description of article 1</p>» Title 1
+\x02[feed1]\x02 <Author 2> |<p>Description of article 2</p>| {2 at http://www.site1.com/} \x02→\x02 http://www.site1.com/article2 (2016-08-22 02:20) «<p>Description of article 2</p>» Title 2
+\x02[feed1]\x02 <Author 3> |<p>Description of article 3</p>| {3 at http://www.site1.com/} \x02→\x02 http://www.site1.com/article3 (2016-08-23 03:30) «<p>Description of article 3</p>» Title 3
+'''
+    assert expected == bot_rssUpdate.output
+
+
+def test_rssGetfeed_nonexistent(bot):
+    rss.__rssGet(bot, 'abcd')
+    expected = 'feed "abcd" doesn\'t exist!\n'
+    assert expected == bot.output
 
 
 def test_rssGet_update(bot):
